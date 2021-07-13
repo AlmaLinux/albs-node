@@ -109,6 +109,21 @@ class TestDownloadFile(TestCase):
         os.mkdir(self.test_dir)
         self.dst_file = os.path.join(self.test_dir, 'downloaded.txt')
 
+    def test_local_file_copy(self):
+        """
+        build_node.utils.file_utils.download_file should call local_file_copy
+        when local file passed as first argument
+        """
+        source_file_name = 'source.txt'
+        source_file = os.path.join(self.test_dir, source_file_name)
+        open(source_file, 'w')
+
+        with mock.patch('build_node.utils.file_utils.local_file_copy') as func:
+            download_file(source_file, self.dst_file)
+            self.assertTrue(func.called)
+            self.assertEqual(func.call_args[0], (source_file, self.dst_file,
+                                                 source_file_name))
+
     def test_ftp_file_download(self):
         """
         build_node.utils.file_utils.download_file should call ftp_file_download

@@ -9,6 +9,7 @@ import re
 import apt_pkg
 import hashlib
 import traceback
+import itertools
 import time
 
 import plumbum
@@ -50,7 +51,7 @@ debian_only_deps = ['suggests', 'recommends', 'enhances', 'breaks', 'provides',
 #       packages
 debian_only_fields = ['multi-arch', 'build-ids', 'version', 'section',
                       'maintainer', 'priority', 'auto-built-package',
-                      'original-maintainer']
+                      'original-maintainer', 'built-using']
 
 
 def detect_debian(platform_name):

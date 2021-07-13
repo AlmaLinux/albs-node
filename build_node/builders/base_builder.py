@@ -122,15 +122,17 @@ class BaseBuilder(object):
         self.logger.info('checking out {0} {1} from {2}'.format(
             ref_type, ref, uri))
         if ref_type == 'gerrit_change':
-            WrappedGitRepo.clone_from(uri, git_sources_dir)
+            git_init_repo(git_sources_dir)
             repo = WrappedGitRepo(git_sources_dir)
-            repo.fetch(uri, ref)
+            repo.fetch(uri, ref, depth=1)
             git_checkout(git_sources_dir, 'FETCH_HEAD')
         else:
-            # FIXME: Understand why sometimes we hold repository lock more than 60 seconds
+            # FIXME: Understand why sometimes we hold repository lock more
+            #  than 60 seconds
             with MirroredGitRepo(
                     uri, self.config.git_repos_cache_dir,
-                    self.config.git_cache_locks_dir, timeout=120) as cached_repo:
+                    self.config.git_cache_locks_dir,
+                    timeout=600) as cached_repo:
                 repo = cached_repo.clone_to(git_sources_dir)
                 repo.checkout(ref)
         self.__log_commit_id(git_sources_dir)
