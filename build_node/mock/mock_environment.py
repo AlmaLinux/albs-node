@@ -88,7 +88,15 @@ class MockResult(object):
         """
         if not self.resultdir:
             return []
-        return filter_files(self.resultdir, lambda f: f.endswith('.log'))
+        log_files = filter_files(self.resultdir, lambda f: f.endswith('.log'))
+        chroot_dir = os.path.join(self.resultdir, 'chroot_scan')
+        if os.path.exists(chroot_dir):
+            for dir_name, _, files in os.walk(chroot_dir):
+                for file in files:
+                    if file.endswith('.log'):
+                        log_files.append(os.path.join(os.path.abspath(dir_name),
+                                                      file))
+        return log_files
 
 
 class MockError(Exception, MockResult):

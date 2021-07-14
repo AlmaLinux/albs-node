@@ -25,6 +25,8 @@ from glob import glob
 import plumbum
 import pycurl
 
+from build_node.utils.hashing import get_hasher
+
 
 __all__ = ['chown_recursive', 'clean_dir', 'rm_sudo', 'hash_file',
            'filter_files', 'normalize_path', 'safe_mkdir', 'safe_symlink',
@@ -93,7 +95,7 @@ def filter_files(directory_path, filter_fn):
             if filter_fn(f)]
 
 
-def hash_file(file_path, hasher, buff_size=1048576):
+def hash_file(file_path, hasher=None, hash_type=None, buff_size=1048576):
     """
     Returns checksum (hexadecimal digest) of the file.
 
@@ -103,6 +105,8 @@ def hash_file(file_path, hasher, buff_size=1048576):
         File to hash. It could be either a path or a file descriptor.
     hasher : _hashlib.HASH
         Any hash algorithm from hashlib.
+    hash_type : str
+        Hash type (e.g. sha1, sha256).
     buff_size : int
         Number of bytes to read at once.
 
@@ -111,6 +115,9 @@ def hash_file(file_path, hasher, buff_size=1048576):
     str
         Checksum (hexadecimal digest) of the file.
     """
+    if hasher is None:
+        hasher = get_hasher(hash_type)
+
     def feed_hasher(_fd):
         buff = _fd.read(buff_size)
         while len(buff):

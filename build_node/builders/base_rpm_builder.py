@@ -118,7 +118,8 @@ class BaseRPMBuilder(BaseBuilder):
                     spec_file = self.prepare_koji_sources(git_repo,
                                                           git_sources_dir,
                                                           source_srpm_dir)
-                module = '.module' in info['definitions']['dist']
+                module = '.module' in (info.get('definitions', {})
+                                       .get('dist', ''))
                 if info['git'].get('ref_type') == 'gerrit_change':
                     add_gerrit_ref_to_spec(spec_file,
                                            info['git'].get('ref'))
@@ -510,16 +511,18 @@ class BaseRPMBuilder(BaseBuilder):
         )
         if config.pesign_support:
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/var/run/pesign', '/var/run/pesign')])
+                True, [('/var/run/pesign', '/var/run/pesign'),
+                       ('/etc/pki/kmod', '/etc/pki/kmod')])
             mock_config.add_plugin(bind_plugin)
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(mock_config,
                                                     config.npm_proxy)
-        BaseRPMBuilder.configure_mock_chroot_scan(mock_config)
+        BaseRPMBuilder.configure_mock_chroot_scan(
+            mock_config, task['build'].get('custom_logs', None))
         return mock_config
 
     @staticmethod
-    def configure_mock_chroot_scan(mock_config):
+    def configure_mock_chroot_scan(mock_config, custom_logs=None):
         """
         Configures a mock ChrootScan plugin to save config.log files after
         build.
@@ -528,17 +531,18 @@ class BaseRPMBuilder(BaseBuilder):
         ----------
         mock_config : MockConfig
             Mock chroot configuration.
+        custom_logs : tuple
+            Specified regexes of build logs to save after build.
 
         Notes
         -----
         https://github.com/rpm-software-management/mock/wiki/Plugin-ChrootScan
         """
-        # TODO: it would be nice if user can configure a list of files to
-        #       save for his project
-        chroot_scan = MockPluginConfig(name='chroot_scan', enable=True,
-                                       only_failed=False,
-                                       regexes=[r'config\.log$'])
-        mock_config.add_plugin(chroot_scan)
+        if custom_logs:
+            chroot_scan = MockPluginChrootScanConfig(
+                name='chroot_scan', enable=True, only_failed=False,
+                regexes=custom_logs)
+            mock_config.add_plugin(chroot_scan)
 
     @staticmethod
     def configure_mock_npm_proxy(mock_config, npm_proxy):
@@ -656,7 +660,6 @@ class BaseRPMBuilder(BaseBuilder):
                                             stderr_file_name)
             with open(stderr_file_path, 'w') as fd:
                 fd.write(mock_result.stderr)
-        # TODO: save chroot_scan artifacts
 
     def is_build_excluded(self, srpm_path):
         """

@@ -1,6 +1,6 @@
 # -*- mode:python; coding:utf-8; -*-
-# author: Ruslan Pisarev  <rpisarev@cloudlinux.com>
-# created: 16.01.19  00:50
+# author: Ruslan Pisarev <rpisarev@cloudlinux.com>
+# created: 16.01.19 00:50
 
 
 import traceback

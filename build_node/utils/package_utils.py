@@ -1,6 +1,6 @@
 # -*- mode:python; coding:utf-8; -*-
-# author: Vyacheslav Potoropin  <vpotoropin@cloudlinux.com>
-# created: 23.01.20  12:39
+# author: Vyacheslav Potoropin <vpotoropin@cloudlinux.com>
+# created: 23.01.20 12:39
 
 import re
 
@@ -28,4 +28,4 @@ def is_debug_package(file_name, package_type):
         return False
     elif package_type == 'deb':
         return '-dbg' in file_name
-    return bool(re.search(r'-debug(info|source)-', file_name))
+    return bool(re.search(r'-debug(info|source)', file_name))

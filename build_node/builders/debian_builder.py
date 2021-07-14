@@ -13,6 +13,7 @@ import tempfile
 import time
 import traceback
 import urllib.parse
+import subprocess
 
 import contextlib
 try:
@@ -35,7 +36,7 @@ from build_node.utils.file_utils import (safe_mkdir, filter_files,
                                      chown_recursive, urljoin_path, find_files)
 from build_node.ported import to_unicode
 
-__all__ = ['DebianBuilder']
+__all__ = ['DebianBuilder', 'DebianARMHFBuilder']
 
 
 class DebianBuilder(BaseBuilder):
@@ -74,6 +75,32 @@ class DebianBuilder(BaseBuilder):
             If build failed.
         """
         pbuilder_work_dir = self.config.pbuilder_configs_storage_dir
+        config_vars = self.config_vars
+        pb_config = PbuilderConfig(pbuilder_work_dir, **config_vars)
+        result = self.deb_building(pb_config)
+        self.save_artifacts(result)
+        self.logger.info('Build completed')
+
+    def deb_building(self, pb_config):
+        """
+        Does common circle of building DEB package.
+        We need only define PBuilderConfig and save artifacts
+        Parameters
+        ----------
+        pb_config : PbuilderConfig
+            Config for PBuilder
+
+        Returns
+        -------
+        PbuilderResult
+            Build result object
+
+        Raises
+        ------
+        BuildError
+            If build failed.
+
+        """
         extra_repos = []
         for repo in self.task['build'].get('repositories', ()):
             if repo.get('channel') == REPO_CHANNEL_BUILD:
@@ -93,11 +120,10 @@ class DebianBuilder(BaseBuilder):
             else:
                 raise BuildError('unsupported repository channel {0} for {1}'.
                                  format(repo.get('channel'), repo['url']))
-        config_vars = self.config_vars
-        extra_repos.extend(config_vars.get('othermirror', []))
+
+        extra_repos.extend(self.config_vars.get('othermirror', []))
         extra_mirrors = '|'.join(extra_repos)
         #
-        pb_config = PbuilderConfig(pbuilder_work_dir, **config_vars)
         git_sources_dir = os.path.join(self.task_dir, 'git_sources')
         unpacked_sources_dir = os.path.join(self.task_dir, 'unpacked_sources')
         result_dir = os.path.join(self.task_dir, 'results')
@@ -132,14 +158,13 @@ class DebianBuilder(BaseBuilder):
                               format(src_archive, unpacked_sources_dir))
             prep_src_dir = self.__unpack_sources(src_archive,
                                                  unpacked_sources_dir)
-            debian_dir = filter_files(git_sources_dir,
-                                      lambda f: f == 'debian')[0]
+            git_deb_dir = filter_files(git_sources_dir,
+                                       lambda f: f == 'debian')[0]
             src_deb_dir = os.path.join(prep_src_dir, 'debian')
             if os.path.exists(src_deb_dir):
                 shutil.rmtree(src_deb_dir)
-            shutil.copytree(debian_dir,
-                            os.path.join(prep_src_dir,
-                                         os.path.basename(debian_dir)))
+
+            shutil.copytree(git_deb_dir, src_deb_dir, symlinks=True)
             shutil.copy(src_archive, os.path.dirname(prep_src_dir))
         else:
             prep_src_dir = git_sources_dir
@@ -188,8 +213,7 @@ class DebianBuilder(BaseBuilder):
         self.logger.info('Saving build artifacts')
         if src_archive:
             shutil.copy(src_archive, result_dir)
-        self.save_artifacts(result)
-        self.logger.info('Build completed')
+        return result
 
     def execute_pdebuild(self, sources_dir, result_dir, apt_dir, extra_mirrors,
                          config_file, log_file):
@@ -576,3 +600,123 @@ def get_pbuilder_distr(config):
     else:
         distr = 'bionic'
     return distr
+
+
+class DebianARMHFBuilder(DebianBuilder):
+
+    def __init__(self, config, logger, task, task_dir, artifacts_dir):
+        """
+        Debian builder initialization.
+
+        Parameters
+        ----------
+        config : BuildNodeConfig
+            Build node configuration object.
+        logger : logging.Logger
+            Current build thread logger.
+        task : dict
+            Build task.
+        task_dir : str
+            Build task working directory.
+        artifacts_dir : str
+            Build artifacts (.dsc(s), .deb(s), logs, etc) output directory.
+        """
+        chown_recursive(task_dir)
+        super(DebianARMHFBuilder, self).__init__(config, logger, task,
+                                                 task_dir, artifacts_dir)
+
+    @measure_stage('build_all')
+    def build(self):
+        """
+        Builds and saves debian packages.
+
+        Raises
+        ------
+        BuildError
+            If build failed.
+        """
+        pbuilder_work_dir = self.config.pbuilder_configs_storage_dir
+        othermirror = [
+            'deb http://deb.debian.org/debian buster main',
+            'deb http://deb.debian.org/debian buster-updates main',
+            'deb http://security.debian.org/debian-security '
+            'buster/updates main'
+            ]
+        debootstrapopts = {
+            'keyring': '/usr/share/keyrings/debian-archive-keyring.gpg',
+            'include': 'perl-openssl-defaults apt devscripts build-essential'
+                        ' fakeroot python3',
+            'arch': 'arm64'
+            }
+        config_vars = {
+            'distribution': 'buster',
+            'mirrorsite': 'http://ftp.de.debian.org/debian',
+            'components': 'main contrib non-free',
+            'othermirror': othermirror,
+            'debootstrapopts': debootstrapopts,
+            'arch': 'arm64'}
+        pb_config = PbuilderConfig(pbuilder_work_dir, **config_vars)
+        result = self.deb_building(pb_config)
+        kc_arm64 = [k for k in result.artifacts
+                    if k.endswith('dsc')][0].replace('.dsc', '_arm64.deb')
+        kc_armhf = kc_arm64.replace('_arm64', '_armhf')
+        self.repack_deb_pkg(kc_arm64, kc_armhf)
+        self.save_artifacts(result)
+        self.logger.info('Build completed')
+
+    def repack_deb_pkg(self, built_pkg, result_pkg):
+        """
+
+        Parameters
+        ----------
+        built_pkg : str
+            Whole path to built arm64 package
+        result_pkg : str
+            Whole path to armhf package that'll be repack
+
+        Raises
+        ------
+        CommandExecutionError
+            If repacking failed.
+
+        """
+        self.logger.info('Started repacking of armhf package')
+        unpack_dir = os.path.join(self.task_dir, 'results', 'unpack')
+        debian_dir = os.path.join(unpack_dir, 'DEBIAN')
+        control = os.path.join(unpack_dir, 'DEBIAN', 'control')
+        safe_mkdir(unpack_dir)
+        repacking_armhf_deb = [
+            ['dpkg-deb', '-x', built_pkg, unpack_dir],
+            ['dpkg-deb', '-e', built_pkg, debian_dir],
+            ['sed',  '-i', 's/arm64/armhf/', control],
+            ['dpkg-deb', '-Z', 'xz', '-b', unpack_dir, result_pkg]
+        ]
+        for cmd in repacking_armhf_deb:
+            post_build_exec(cmd)
+        self.logger.info('Repacking of armhf package is finished')
+        shutil.rmtree(unpack_dir)
+        os.remove(built_pkg)
+        self.logger.info('Removed arm64 package')
+
+
+def post_build_exec(cmd):
+    """
+
+    Parameters
+    ----------
+    cmd : iterable
+        Shell command that should be launched
+
+    Raises
+    ------
+    CommandExecutionError
+        If execution failed
+
+    """
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    out, err = proc.communicate()
+    if proc.returncode != 0:
+        message = f'Cannot evaluate command {cmd}:\n{err}'
+        raise CommandExecutionError(message, proc.returncode, out, err, cmd)

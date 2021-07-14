@@ -100,8 +100,14 @@ class PbuilderResult(object):
     def artifacts(self):
         if not self.resultdir:
             return []
-        return filter_files(self.resultdir, lambda f:
-                            re.search(r'\.(deb|changes|dsc|gz|bz2|xz)$', f))
+        # TODO: Since we don't have any logic for processing/releasing
+        #       debian sources, we're uploading only deb/dsc packages.
+        #       If you want to save debian sources properly, please check
+        #       that AL-4617 already resolved.
+        return filter_files(
+            self.resultdir,
+            lambda f: re.search(r'\.(deb|dsc)$', f)
+        )
 
 
 class PbuilderError(Exception, PbuilderResult):

@@ -68,7 +68,7 @@ import logging
 
 
 __all__ = ['MockConfig', 'MockPluginConfig', 'MockBindMountPluginConfig',
-           'MockChrootFile']
+           'MockChrootFile', 'MockPluginChrootScanConfig']
 
 
 def to_mock_config_string(value):
@@ -458,6 +458,66 @@ class MockPluginConfig(object):
             out += 'config_opts["plugin_conf"]["{0}_opts"][{1}] = {2}\n'. \
                 format(self.__name, to_mock_config_string(key),
                        to_mock_config_string(opt))
+        return out
+
+    @property
+    def name(self):
+        """
+        mock plugin name.
+
+        Returns
+        -------
+        str
+        """
+        return self.__name
+
+    @property
+    def enable(self):
+        return self.__enable
+
+
+class MockPluginChrootScanConfig(object):
+
+    """
+    mock plugin configuration.
+    """
+
+    def __init__(self, name, enable, **kwargs):
+        """
+        mock plugin configuration initialization.
+
+        Parameters
+        ----------
+        name : str
+            Plugin name (e.g. tmpfs).
+        enable : bool
+            Enable (True) or disable (False) this plugin.
+
+        Notes
+        -----
+        It's possible to pass additional plugin options with `kwargs`.
+        """
+        self.__name = name
+        self.__enable = enable
+        self.__opts = copy.copy(kwargs)
+
+    def render_config(self):
+        """
+        Dumps a mock plugin configuration as a configuration file string.
+
+        Returns
+        -------
+        str
+            mock plugin configuration.
+        """
+        out = 'config_opts["plugin_conf"]["{0}_enable"] = {1}\n'. \
+            format(self.__name, to_mock_config_string(self.__enable))
+        if not self.__enable:
+            return out
+        opts_dict = {}
+        for key, opt in sorted(self.__opts.items()):
+            opts_dict[key] = opt
+        out += f'config_opts["plugin_conf"]["{self.__name}_opts"] = {opts_dict}\n'
         return out
 
     @property

@@ -28,7 +28,7 @@ release_tracker_source_schema = {
     'name': {'type': 'string', 'required': True},
     'tracker_type': {'type': 'string', 'required': True,
                      'allowed': ['deb_kernel', 'rpm_kernel', 'cve_mitre',
-                                 'rpm_libcare', 'deb_libcare']},
+                                 'rpm_libcare', 'deb_libcare', 'pecl', 'openssl']},
     'corresponding_packages': {
         'type': 'list',
         'schema': {
@@ -65,7 +65,8 @@ release_tracker_source_schema = {
             }
         }
     },
-    'projects': {'type': 'list'} 
+    'projects': {'type': 'list'},
+    'packages': {'type': 'dict'}
 }
 
 
