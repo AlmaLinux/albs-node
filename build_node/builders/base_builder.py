@@ -15,10 +15,10 @@ import yaml
 
 from build_node.mock.mock_environment import MockError
 from build_node.mock.mock_config import (MockConfig, MockBindMountPluginConfig,
-                                     MockChrootFile)
+                                         MockChrootFile)
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.utils.file_utils import safe_mkdir, chown_recursive
-from build_node.utils.git_utils import git_get_commit_id
+from build_node.utils.git_utils import git_get_commit_id, git_init_repo
 from build_node.utils.git_utils import (
     MirroredGitRepo, WrappedGitRepo, git_checkout
 )
