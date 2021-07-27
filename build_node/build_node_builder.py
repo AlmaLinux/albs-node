@@ -22,6 +22,7 @@ import zmq
 
 from build_node.builders import get_suitable_builder
 from build_node.build_node_errors import BuildError, BuildExcluded
+from build_node.uploaders.pulp import PulpRpmUploader
 from build_node.utils.file_utils import clean_dir, rm_sudo
 from build_node.utils.sentry_utils import Sentry
 from build_node.utils.zmq_utils import setup_client_socket, DealerRepCommunicator
@@ -70,6 +71,10 @@ class BuildNodeBuilder(threading.Thread):
         self.__sentry = Sentry(config.sentry_dsn)
         # current task builder object
         self.__builder = None
+        self._uploader = PulpRpmUploader(
+            self.__config.pulp_host, self.__config.pulp_user,
+            self.__config.pulp_password, self.__config.pulp_chunk_size
+        )
 
         self.__terminated_event = terminated_event
         self.__graceful_terminated_event = graceful_terminated_event
@@ -173,11 +178,14 @@ class BuildNodeBuilder(threading.Thread):
         self.__builder.build()
 
     def __upload_artifacts(self, task, artifacts_dir, task_log_file):
+        self._uploader.upload(artifacts_dir)
+        # TODO: Upload logs to S3
         build_stats = self.__builder.get_build_stats()
         start_time = datetime.datetime.utcnow()
         for file_name in os.listdir(artifacts_dir):
-            self.__upload_artifact(task, os.path.join(artifacts_dir,
-                                                      file_name))
+            if file_name.endswith('.log'):
+                self.__upload_artifact(
+                    task, os.path.join(artifacts_dir, file_name))
         end_time = datetime.datetime.utcnow()
         build_stats['upload'] = {'start_ts': start_time, 'end_ts': end_time}
         build_stats['total'] = {'start_ts': self.__start_ts,
