@@ -7,7 +7,7 @@ validators
 python-debian
 mockupdb
 configparser
-zmq
+requests
 raven
 GitPython==2.1.10
 gitdb2==2.0.6
@@ -24,3 +24,4 @@ memoization
 filesplit==3.0.2
 pulp-rpm-client==3.14.0
 pulpcore-client==3.14.3
+pydantic

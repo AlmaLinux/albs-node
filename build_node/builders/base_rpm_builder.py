@@ -6,7 +6,6 @@
 Base class for CloudLinux Build System RPM package builders.
 """
 
-import datetime
 import itertools
 import os
 import re
@@ -24,24 +23,18 @@ from build_node.build_node_errors import (
     BuildError, BuildConfigurationError, BuildExcluded
 )
 from build_node.constants import REPO_CHANNEL_BUILD
-from build_node.errors import DataNotFoundError
 from build_node.mock.error_detector import build_log_excluded_arch
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.mock.mock_config import (
-    MockConfig, MockChrootFile, MockPluginConfig, MockBindMountPluginConfig)
+    MockConfig, MockChrootFile, MockBindMountPluginConfig,
+    MockPluginChrootScanConfig
+)
 from build_node.mock.mock_environment import MockError
-from build_node.utils.debian_utils import dch_add_changelog_record
 from build_node.utils.rpm_utils import unpack_src_rpm
-from build_node.utils.spec_parser import RPMChangelogRecord
 from build_node.utils.file_utils import download_file
-from build_node.utils.spec_utils import (add_gerrit_ref_to_spec, find_spec_file,
-                                     bump_release_spec_file,
-                                     bump_version_datestamp_spec_file,
-                                     add_changelog_spec_file,
-                                     get_raw_spec_data, wipe_rpm_macro)
+from build_node.utils.spec_utils import add_gerrit_ref_to_spec
 
 from build_node.utils.index_utils import extract_metadata
-from build_node.utils.git_utils import git_commit, git_create_tag, git_push
 from build_node.utils.spec_parser import SpecParser, SpecSource
 from build_node.ported import to_unicode
 
@@ -90,46 +83,28 @@ class BaseRPMBuilder(BaseBuilder):
         #       then will be found the last of specs in alphabet order
         #       e.g. `securelve.spec` for `cagefs` project
         try:
-            info = self.task['build']
-            if self.is_srpm_build_required(self.task):
+            if self.task.is_srpm_build_required():
                 git_sources_dir = os.path.join(self.task_dir, 'git_sources')
                 os.makedirs(git_sources_dir)
                 git_repo = self.checkout_git_sources(
-                    git_sources_dir, **self.task['build']['git'])
+                    git_sources_dir, self.task.ref)
                 self.execute_pre_build_hook(git_sources_dir)
-                if self.is_koji_sources(git_sources_dir, self.task):
-                    source_srpm_dir = git_sources_dir
-                    spec_file = self.locate_spec_file(source_srpm_dir,
-                                                      self.task)
-                    # NOTE: that setting is used by some packages like
-                    #       httpd24-mod_lsapi
-                    if self.builder_kwargs.get('sources_dir'):
-                        source_srpm_dir = \
-                            os.path.join(source_srpm_dir,
-                                         self.builder_kwargs['sources_dir'])
-                    if self.is_bump_required():
-                        self.created_tag = \
-                            self.bump_release_and_commit(git_sources_dir,
-                                                         spec_file)
-                else:
-                    source_srpm_dir = os.path.join(self.task_dir,
-                                                   'source_srpm')
-                    os.makedirs(source_srpm_dir)
-                    spec_file = self.prepare_koji_sources(git_repo,
-                                                          git_sources_dir,
-                                                          source_srpm_dir)
-                module = '.module' in (info.get('definitions', {})
-                                       .get('dist', ''))
-                if info['git'].get('ref_type') == 'gerrit_change':
-                    add_gerrit_ref_to_spec(spec_file,
-                                           info['git'].get('ref'))
-                elif info['git'].get('ref_type') == 'branch' and not module:
+                source_srpm_dir = os.path.join(
+                    self.task_dir, 'source_srpm')
+                os.makedirs(source_srpm_dir)
+                spec_file = self.prepare_koji_sources(
+                    git_repo, git_sources_dir, source_srpm_dir)
+                module = '.module' in self.task.platform.data.get(
+                    'definitions', {}).get('dist', '')
+                if self.task.ref.ref_type == 'gerrit_change':
+                    add_gerrit_ref_to_spec(spec_file, self.task.ref.git_ref)
+                elif self.task.ref.ref_type == 'branch' and not module:
                     add_gerrit_ref_to_spec(spec_file)
             else:
                 source_srpm_dir = self.unpack_sources()
-                spec_file = self.locate_spec_file(source_srpm_dir, self.task)
-            if info.get('allow_sources_download'):
-                mock_defines = info.get('definitions')
+                spec_file = self.locate_spec_file(source_srpm_dir)
+            if self.task.platform.data.get('allow_sources_download'):
+                mock_defines = self.task.platform.data.get('definitions')
                 self.download_remote_sources(source_srpm_dir, spec_file,
                                              mock_defines)
             self.build_packages(source_srpm_dir, spec_file)
@@ -165,7 +140,7 @@ class BaseRPMBuilder(BaseBuilder):
             Mock command execution result.
         """
         if not spec_file:
-            spec_file = self.locate_spec_file(sources_dir, self.task)
+            spec_file = self.locate_spec_file(sources_dir)
         with self.mock_supervisor.environment(mock_config) as mock_env:
             return mock_env.buildsrpm(spec_file, sources_dir, resultdir,
                                       definitions=definitions,
@@ -184,7 +159,7 @@ class BaseRPMBuilder(BaseBuilder):
         spec_file : str, optional
             Spec file path. It will be detected automatically if omitted.
         """
-        mock_defines = self.task['build'].get('definitions')
+        mock_defines = self.task.platform.data.get('definitions')
         self.logger.info('starting src-RPM build')
         srpm_result_dir = os.path.join(self.task_dir, 'srpm_result')
         os.makedirs(srpm_result_dir)
@@ -229,75 +204,6 @@ class BaseRPMBuilder(BaseBuilder):
                     self.save_build_artifacts(rpm_build_result)
         self.logger.info('RPM build completed')
 
-    def bump_release_and_commit(self, source_srpm_dir, spec_file):
-        """
-        Bumps a spec file release and commits a corresponding git tag to a
-        project's git repository.
-
-        Parameters
-        ----------
-        source_srpm_dir : str
-            Unpacked source RPM path.
-        spec_file : str
-            Spec file path.
-
-        Returns
-        -------
-        str
-            Created git tag name.
-        """
-        task = self.task
-        bump_policy = task['build'].get('bump_policy')
-        if bump_policy not in ('release:last_commit', 'version:datestamp'):
-            raise BuildError('unsupported release bumping policy "{0}"'.
-                             format(bump_policy))
-        try:
-            git_uri = task['build']['git']['uri']
-            self.logger.info('bumping release in the {0} spec file'.
-                             format(spec_file))
-            if bump_policy == 'release:last_commit':
-                bump_release_spec_file(spec_file)
-                spec_data = get_raw_spec_data(spec_file, ['Version',
-                                                          'Release'])
-            else:
-                spec_data = bump_version_datestamp_spec_file(spec_file)
-            new_tag = '{0}-{1}'. \
-                format(wipe_rpm_macro(spec_data.get('Version', '')),
-                       wipe_rpm_macro(spec_data.get('Release', '')))
-            # insert changelog to a spec file
-            author = task['created_by']
-            changelog_text = task['build'].get('changelog')
-            if changelog_text:
-                rpm_changelog = \
-                    RPMChangelogRecord.generate(datetime.date.today(),
-                                                author['name'],
-                                                author['email'], new_tag,
-                                                changelog_text.split('\n'))
-                add_changelog_spec_file(spec_file, str(rpm_changelog))
-            # create a new debian package version
-            if os.path.exists(os.path.join(source_srpm_dir, 'debian')):
-                self.logger.info('adding "{0}" version to a debian package'.
-                                 format(new_tag))
-                if not changelog_text:
-                    changelog_text = '{0} version'.format(new_tag)
-                dch_add_changelog_record(source_srpm_dir, 'unstable',
-                                         changelog_text, new_tag,
-                                         author['email'], author['name'])
-            # commit a new git tag
-            self.logger.info('creating a "{0}" git tag with bumped release'.
-                             format(new_tag))
-            git_commit(source_srpm_dir, new_tag, commit_all=True)
-            git_create_tag(source_srpm_dir, new_tag)
-            git_push(source_srpm_dir, git_uri)
-            git_push(source_srpm_dir, git_uri, tags=True)
-            return new_tag
-        except Exception as e:
-            msg = ('can not bump release in the {0} spec file: {1}.'
-                   ' Traceback:\n{2}')
-            self.logger.error(msg.format(spec_file, str(e),
-                                         traceback.format_exc()))
-            raise BuildError('can not bump release')
-
     def unpack_sources(self):
         """
         Unpacks already built src-RPM
@@ -307,19 +213,12 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Path to the unpacked src-RPM sources.
         """
-        srpm_url = self.task['srpm']['url']
-        self.logger.info('repacking previously built src-RPM {0}'.
-                         format(srpm_url))
+        srpm_url = self.task.ref.url
+        self.logger.info(f'repacking previously built src-RPM {srpm_url}')
         src_dir = os.path.join(self.task_dir, 'srpm_sources')
         os.makedirs(src_dir)
         self.logger.debug('Downloading {0}'.format(srpm_url))
-        credentials = self.task['srpm'].get('download_credentials', {})
-        if self.task['srpm']['type'] == 'internal':
-            credentials['login'] = self.config.node_id
-            credentials['password'] = self.config.jwt_token
-        if self.config.development_mode:
-            credentials['no_ssl_verify'] = True
-        srpm = download_file(srpm_url, src_dir, timeout=900, **credentials)
+        srpm = download_file(srpm_url, src_dir, timeout=900)
         self.logger.debug('Unpacking {0} to the {1}'.format(srpm, src_dir))
         unpack_src_rpm(srpm, os.path.dirname(srpm))
         self.logger.info('Sources are prepared')
@@ -347,14 +246,12 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Spec file path in the koji compatible sources directory.
         """
-        spec_path = self.locate_spec_file(git_sources_dir, self.task)
-        parsed_spec = SpecParser(spec_path,
-                                 self.task['build'].get('definitions'))
+        spec_path = self.locate_spec_file(git_sources_dir)
+        parsed_spec = SpecParser(
+            spec_path, self.task.platform.data.get('definitions')
+        )
         tarball_path = None
         tarball_name = None
-        excludes = self.task['build'].get('builder', {}).get('kwargs', {}).\
-            get('exclude', [])
-        excludes.append(os.path.split(spec_path)[1])
         for source in itertools.chain(parsed_spec.source_package.sources,
                                       parsed_spec.source_package.patches):
             if source.position == 0 and isinstance(source, SpecSource):
@@ -367,7 +264,6 @@ class BaseRPMBuilder(BaseBuilder):
                 else:
                     # TODO: verify that it works with all valid remote URLs
                     file_name = os.path.basename(parsed_url.path)
-                excludes.append(file_name)
                 if not src_suffix_dir:
                     source_path = os.path.join(git_sources_dir, file_name)
                 else:
@@ -387,19 +283,11 @@ class BaseRPMBuilder(BaseBuilder):
             tarball_prefix = '{0}-{1}/'.format(
                 parsed_spec.source_package.name,
                 parsed_spec.source_package.version)
-            excludes = [os.path.join(tarball_prefix, e.strip('/'))
-                        for e in excludes]
-            git_ref = self.task['build']['git']['ref']
-            if self.task['build']['git']['ref_type'] == 'gerrit_change':
+            git_ref = self.task.ref.git_ref
+            if self.task.ref.ref_type == 'gerrit_change':
                 git_ref = 'HEAD'
-            if 'git_archive_dir' in self.builder_kwargs:
-                git_ref = '{0}:{1}'.format(
-                    git_ref, self.builder_kwargs['git_archive_dir'])
             git_repo.archive(git_ref, tarball_path, archive_format='tar.bz2',
-                             prefix=tarball_prefix, exclude=excludes)
-        if self.is_bump_required():
-            self.created_tag = self.bump_release_and_commit(git_sources_dir,
-                                                            spec_path)
+                             prefix=tarball_prefix)
         spec_file_name = os.path.basename(spec_path)
         new_spec_path = os.path.join(output_dir, spec_file_name)
         shutil.copy(spec_path, new_spec_path)
@@ -431,37 +319,6 @@ class BaseRPMBuilder(BaseBuilder):
             download_file(source.name, sources_dir)
 
     @staticmethod
-    def is_srpm_build_required(task):
-        return 'srpm' not in task
-
-    @staticmethod
-    def is_koji_sources(sources_dir, task):
-        """
-        Checks if sources in the specified directory are compatible with
-        a standard RPM building process (i.e. the directory contains an archive
-        and a spec file).
-
-        Parameters
-        ----------
-        sources_dir : str
-            Sources directory path.
-        task : dict
-            Build task.
-
-        Returns
-        -------
-        bool
-            True if sources in the specified directory are compatible with a
-            standard RPM building process, False otherwise.
-        """
-        if task['build'].get('builder', {}).get('class') in \
-                ('KojiBuilder', 'CL6LveKernelKmodBuilder', 'AltPHPBuilder'):
-            return True
-        # TODO: parse spec file and verify that all sources are present in the
-        #       sources directory
-        return False
-
-    @staticmethod
     def generate_mock_config(config, task, srpm_build=False):
         """
         Initializes a mock chroot configuration for the specified task.
@@ -482,30 +339,28 @@ class BaseRPMBuilder(BaseBuilder):
             Mock chroot configuration.
         """
         yum_repos = []
-        for repo in task['build']['repositories']:
-            # NOTE: this was disabled to make module_enable and module_install
-            #       yum options work. Some modules (e.g. cl-MySQLXY) are
-            #       living in external repositories.
-            # if srpm_build and not repo.get('required_for_srpm'):
-            #     continue
+        for repo in task.repositories:
             auth_params = {}
-            if repo.get('channel') == REPO_CHANNEL_BUILD:
+            if repo.channel == REPO_CHANNEL_BUILD:
                 auth_params['username'] = config.node_id
                 auth_params['password'] = config.jwt_token
                 auth_params['sslverify'] = \
                     '0' if config.development_mode else '1'
-            yum_repos.append(YumRepositoryConfig(repositoryid=repo['name'],
-                                                 name=repo['name'],
-                                                 baseurl=repo['url'],
-                                                 **auth_params))
-        yum_config_kwargs = task['build'].get('yum', {})
+            yum_repos.append(
+                YumRepositoryConfig(
+                    repositoryid=repo.name,
+                    name=repo.name,
+                    baseurl=repo.url,
+                    **auth_params)
+            )
+        yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
         mock_config_kwargs = {'use_bootstrap_container': False}
-        for key, value in task['build']['mock'].items():
+        for key, value in task.platform.data['mock'].items():
             mock_config_kwargs[key] = value
         mock_config = MockConfig(
-            dist=task['build'].get('mock_dist'), use_nspawn=False,
+            dist=task.platform.data.get('mock_dist'), use_nspawn=False,
             rpmbuild_networking=True, use_host_resolv=True,
             yum_config=yum_config, **mock_config_kwargs
         )
@@ -515,10 +370,10 @@ class BaseRPMBuilder(BaseBuilder):
                        ('/etc/pki/kmod', '/etc/pki/kmod')])
             mock_config.add_plugin(bind_plugin)
         if config.npm_proxy:
-            BaseRPMBuilder.configure_mock_npm_proxy(mock_config,
-                                                    config.npm_proxy)
+            BaseRPMBuilder.configure_mock_npm_proxy(
+                mock_config, config.npm_proxy)
         BaseRPMBuilder.configure_mock_chroot_scan(
-            mock_config, task['build'].get('custom_logs', None))
+            mock_config, task.platform.data.get('custom_logs', None))
         return mock_config
 
     @staticmethod
@@ -580,7 +435,7 @@ class BaseRPMBuilder(BaseBuilder):
         mock_config.add_file(MockChrootFile('/usr/etc/yarnrc', yarnrc_content))
 
     @staticmethod
-    def locate_spec_file(sources_dir, task):
+    def locate_spec_file(sources_dir):
         """
         Locates a spec file in the specified sources directory.
 
@@ -596,17 +451,10 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Spec file path.
         """
-        # TODO: do we really need that method? I think we could use
-        #       find_spec_file directly everywhere
-        try:
-            spec_file = find_spec_file(task['build']['project_name'],
-                                       sources_dir,
-                                       task['build'].get('spec_file'))
-            if not spec_file:
-                raise DataNotFoundError()
-            return spec_file
-        except DataNotFoundError:
-            raise BuildError('spec file is not found')
+        for filename in os.listdir(sources_dir):
+            if filename.endswith('.spec'):
+                return os.path.join(sources_dir, filename)
+        raise BuildError('Spec file is not found')
 
     def save_build_artifacts(self, mock_result, srpm_artifacts=False):
         """
@@ -678,7 +526,7 @@ class BaseRPMBuilder(BaseBuilder):
             should be excluded, False otherwise) and the second is an exclusion
             reason description.
         """
-        arch = self.task['build']['arch']
+        arch = self.task.arch
         meta = extract_metadata(srpm_path)
 
         def get_expanded_value(field):
@@ -726,16 +574,3 @@ class BaseRPMBuilder(BaseBuilder):
                     if error:
                         return True, error[1]
         return False, None
-
-    def is_bump_required(self):
-        """
-        Checks if a version or release bump is required (i.e. we're building
-        a package from a git branch and a bump policy is defined).
-
-        Returns
-        -------
-        bool
-            True if version or release bump is required, False otherwise.
-        """
-        return (self.task['build']['git']['ref_type'] == 'branch'
-                and self.task['build'].get('bump_policy'))
