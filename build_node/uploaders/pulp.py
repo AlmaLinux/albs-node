@@ -234,5 +234,4 @@ class PulpRpmUploader(PulpBaseUploader):
 
         """
         all_files = super().get_artifacts_list(artifacts_dir)
-        return [os.path.join(artifacts_dir, file_) for file_
-                in all_files if file_.endswith('.rpm')]
+        return [file_ for file_ in all_files if file_.endswith('.rpm')]
