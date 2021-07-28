@@ -27,6 +27,10 @@ DEFAULT_PULP_HOST = 'http://pulp'
 DEFAULT_PULP_USER = 'pulp'
 DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
+DEFAULT_S3_REGION = ''
+DEFAULT_S3_BUCKET = ''
+DEFAULT_S3_SECRET_ACCESS_KEY = ''
+DEFAULT_S3_ACCESS_KEY_ID = ''
 
 __all__ = ['BuildNodeConfig']
 
@@ -112,6 +116,10 @@ class BuildNodeConfig(BaseConfig):
             'pulp_user': DEFAULT_PULP_USER,
             'pulp_password': DEFAULT_PULP_PASSWORD,
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
+            's3_region': DEFAULT_S3_REGION,
+            's3_bucket': DEFAULT_S3_BUCKET,
+            's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
+            's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -141,6 +149,10 @@ class BuildNodeConfig(BaseConfig):
             'pulp_user': {'type': 'string', 'nullable': False},
             'pulp_password': {'type': 'string', 'nullable': False},
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
+            's3_bucket': {'type': 'string', 'nullable': False},
+            's3_region': {'type': 'string', 'nullable': False},
+            's3_access_key_id': {'type': 'string', 'nullable': False},
+            's3_secret_access_key': {'type': 'string', 'nullable': False},
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)

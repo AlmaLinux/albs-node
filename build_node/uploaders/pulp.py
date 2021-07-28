@@ -10,21 +10,18 @@ from pulpcore.client.pulpcore.api_client import ApiClient
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
 
+from build_node.uploaders.base import BaseUploader, UploadError
 from build_node.utils.file_utils import hash_file
 
 
 __all__ = ['PulpBaseUploader', 'PulpRpmUploader']
 
 
-class UploadError(Exception):
-    pass
-
-
 class TaskFailedError(Exception):
     pass
 
 
-class PulpBaseUploader(object):
+class PulpBaseUploader(BaseUploader):
     """
     Handles uploads to Pulp server.
     """
@@ -162,27 +159,7 @@ class PulpBaseUploader(object):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
-    @staticmethod
-    def get_artifacts_list(artifacts_dir: str):
-        """
-        Returns the list of the files in artifacts directory
-        that need to be uploaded.
-
-        Parameters
-        ----------
-        artifacts_dir : str
-            Path to artifacts directory.
-
-        Returns
-        -------
-        list
-            List of files.
-
-        """
-        _, _, files = os.walk(artifacts_dir)
-        return files
-
-    def upload(self, artifacts_dir: str) -> List[str]:
+    def upload(self, artifacts_dir: str, **kwargs) -> List[str]:
         """
 
         Parameters
@@ -216,7 +193,7 @@ class PulpBaseUploader(object):
 class PulpRpmUploader(PulpBaseUploader):
 
     @staticmethod
-    def get_artifacts_list(artifacts_dir: str):
+    def get_artifacts_list(artifacts_dir: str) -> List[str]:
         """
 
         Returns the list of the files in artifacts directory
