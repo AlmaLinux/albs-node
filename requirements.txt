@@ -21,3 +21,6 @@ pebble
 pyyaml
 mock
 memoization
+filesplit==3.0.2
+pulp-rpm-client==3.14.0
+pulpcore-client==3.14.3

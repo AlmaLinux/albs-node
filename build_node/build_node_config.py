@@ -23,6 +23,10 @@ DEFAULT_ARM64_BUILDING = False
 DEFAULT_ARM32_BUILDING = False
 DEFAULT_PESIGN_SUPPORT = False
 DEFAULT_NODE_TYPE = 'hard'
+DEFAULT_PULP_HOST = 'http://pulp'
+DEFAULT_PULP_USER = 'pulp'
+DEFAULT_PULP_PASSWORD = 'test_pwd'
+DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 
 __all__ = ['BuildNodeConfig']
 
@@ -60,6 +64,14 @@ class BuildNodeConfig(BaseConfig):
         Git repositories cache directory.
     sentry_dsn : str
         Client key to send build data to Sentry.
+    pulp_host : str
+        HTTP address of Pulp server.
+    pulp_user : str
+        Pulp username.
+    pulp_password : str
+        Pulp password.
+    pulp_chunk_size : int
+        Size of file chunk to upload through Pulp.
     """
 
     def __init__(self, config_file=None, **cmd_args):
@@ -95,7 +107,11 @@ class BuildNodeConfig(BaseConfig):
             'arm32_support': DEFAULT_ARM32_BUILDING,
             'pesign_support': DEFAULT_PESIGN_SUPPORT,
             'node_type': DEFAULT_NODE_TYPE,
-            'sentry_dsn': DEFAULT_SENTRY_DSN
+            'sentry_dsn': DEFAULT_SENTRY_DSN,
+            'pulp_host': DEFAULT_PULP_HOST,
+            'pulp_user': DEFAULT_PULP_USER,
+            'pulp_password': DEFAULT_PULP_PASSWORD,
+            'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -121,6 +137,10 @@ class BuildNodeConfig(BaseConfig):
             'pesign_support': {'type': 'boolean', 'default': False},
             'node_type': {'type': 'string', 'nullable': True},
             'sentry_dsn': {'type': 'string', 'nullable': True},
+            'pulp_host': {'type': 'string', 'nullable': False},
+            'pulp_user': {'type': 'string', 'nullable': False},
+            'pulp_password': {'type': 'string', 'nullable': False},
+            'pulp_chunk_size': {'type': 'integer', 'nullable': False},
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)
