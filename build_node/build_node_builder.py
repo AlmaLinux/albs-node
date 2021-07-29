@@ -92,7 +92,8 @@ class BuildNodeBuilder(threading.Thread):
                 os.makedirs(artifacts_dir)
                 task_log_handler = self.__init_task_logger(task_log_file)
                 self.__build_packages(task, task_dir, artifacts_dir)
-                self.__upload_artifacts(task, artifacts_dir, task_log_file)
+                build_artifacts = self.__upload_artifacts(
+                    task, artifacts_dir, task_log_file)
                 success = True
             except BuildError as e:
                 self.__logger.error('task {0} build failed: {1}'.
@@ -124,7 +125,8 @@ class BuildNodeBuilder(threading.Thread):
                                 str(e), traceback.format_exc()))
                         self.__sentry.capture_exception(e)
                 if not excluded:
-                    self.__report_done_task(task, success=success)
+                    self.__report_done_task(
+                        task, success=success, artifacts=build_artifacts)
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
@@ -158,7 +160,7 @@ class BuildNodeBuilder(threading.Thread):
         self.__builder.build()
 
     def __upload_artifacts(self, task, artifacts_dir, task_log_file):
-        self._uploader.upload(artifacts_dir)
+        return self._uploader.upload(artifacts_dir)
         # TODO: Upload logs to S3
         build_stats = self.__builder.get_build_stats()
         start_time = datetime.datetime.utcnow()
@@ -204,18 +206,21 @@ class BuildNodeBuilder(threading.Thread):
         kwargs = {'task_id': task.id, 'reason': reason}
         self.__call_master('build_excluded', **kwargs)
 
-    def __report_done_task(self, task, success=True):
-        kwargs = {'task_id': task.id, 'success': success}
+    def __report_done_task(self, task, success=True, artifacts=None):
+        kwargs = {
+            'task_id': task.id,
+            'success': success,
+            'artifacts': artifacts
+        }
         self.__call_master('build_done', **kwargs)
 
     def __call_master(self, endpoint, **parameters):
-        request = {
-            'node_id': self.__config.node_id,
-            'parameters': parameters
-        }
         # TODO: move to config
         full_url = urllib.parse.urljoin(self.__config.master_url, f'build_node/{endpoint}')
-        response = requests.get(full_url, data=request)
+        if endpoint == 'build_done':
+            response = requests.post(full_url, json=parameters)
+        else:
+            response = requests.get(full_url, json=parameters)
         response.raise_for_status()
         return response.json()
 

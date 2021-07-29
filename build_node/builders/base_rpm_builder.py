@@ -362,7 +362,7 @@ class BaseRPMBuilder(BaseBuilder):
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'), use_nspawn=False,
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, **mock_config_kwargs
+            yum_config=yum_config, target_arch=task.arch, **mock_config_kwargs
         )
         if config.pesign_support:
             bind_plugin = MockBindMountPluginConfig(
