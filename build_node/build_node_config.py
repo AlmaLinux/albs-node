@@ -10,7 +10,7 @@ import os
 
 from build_node.utils.config import BaseConfig
 
-DEFAULT_MASTER_URL = 'http://web_server:8000/'
+DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
 DEFAULT_SENTRY_DSN = None

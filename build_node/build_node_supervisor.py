@@ -39,5 +39,6 @@ class BuilderSupervisor(threading.Thread):
                 self.config.master_url, 'build_node/ping'
             )
             data = {'active_tasks': [int(item) for item in active_tasks]}
-            requests.post(full_url, json=data)
+            headers = {'authorization': f'Bearer {self.config.jwt_token}'}
+            requests.post(full_url, json=data, headers=headers)
             self.terminated_event.wait(60)

@@ -217,10 +217,15 @@ class BuildNodeBuilder(threading.Thread):
     def __call_master(self, endpoint, **parameters):
         # TODO: move to config
         full_url = urllib.parse.urljoin(self.__config.master_url, f'build_node/{endpoint}')
+        headers = {'authorization': f'Bearer {self.__config.jwt_token}'}
         if endpoint == 'build_done':
-            response = requests.post(full_url, json=parameters)
+            response = requests.post(
+                full_url,
+                json=parameters,
+                headers=headers
+            )
         else:
-            response = requests.get(full_url, json=parameters)
+            response = requests.get(full_url, json=parameters, headers=headers)
         response.raise_for_status()
         return response.json()
 
