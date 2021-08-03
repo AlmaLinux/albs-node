@@ -12,7 +12,6 @@ import platform
 
 import cerberus
 import yaml
-import zmq.auth
 
 from build_node.utils.file_utils import normalize_path
 
@@ -40,59 +39,6 @@ class ConfigValidator(cerberus.Validator):
             otherwise.
         """
         return isinstance(value, datetime.timedelta)
-
-    def _validate_zmq_public_key(self, zmq_public_key, field, value):
-        """
-        Checks that the value contains a path to a valid ZeroMQ Curve public
-        key file.
-
-        Parameters
-        ----------
-        zmq_public_key : bool
-            True if the rule should be checked.
-        field : str
-            Document's field name.
-        value : str
-            Value to check.
-
-        Notes
-        -----
-        The rule's arguments are validated against this schema:
-        {'type': 'boolean'}
-        """
-        if zmq_public_key:
-            try:
-                zmq.auth.load_certificate(value)
-            except Exception as e:
-                self._error(field, str(e))
-
-    def _validate_zmq_private_key(self, zmq_private_key, field, value):
-        """
-        Checks that the value contains a path to a valid ZeroMQ Curve private
-        key file.
-
-        Parameters
-        ----------
-        zmq_private_key : bool
-            True if the rule should be checked.
-        field : str
-            Document's field name.
-        value : str
-            Value to check.
-
-        Notes
-        -----
-        The rule's arguments are validated against this schema:
-        {'type': 'boolean'}
-        """
-        if zmq_private_key:
-            try:
-                _, private_key = zmq.auth.load_certificate(value)
-                if not private_key:
-                    self._error(field,
-                                'No private key found in {0}'.format(value))
-            except Exception as e:
-                self._error(field, str(e))
 
 
 def locate_config_file(component, config_path=None):

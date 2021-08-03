@@ -7,14 +7,10 @@ CloudLinux Build System build node configuration storage.
 """
 
 import os
-import platform
-import re
 
-from build_node.errors import ConfigurationError
 from build_node.utils.config import BaseConfig
-from build_node.utils.file_utils import normalize_path
 
-DEFAULT_MASTER_URL = 'tcp://127.0.0.1:32167'
+DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
 DEFAULT_SENTRY_DSN = None
@@ -49,12 +45,6 @@ class BuildNodeConfig(BaseConfig):
         Build server connection URL.
     npm_proxy : str
         NPM (Yarn) proxy URL.
-    master_key_path : str
-        Build master public ZeroMQ Curve key path.
-    public_key_path : str
-        Build node public ZeroMQ Curve key path.
-    private_key_path : str
-        Build node private ZeroMQ Curve key path.
     node_id : str
         Current build node unique identifier.
     threads_count : int
@@ -89,16 +79,10 @@ class BuildNodeConfig(BaseConfig):
         cmd_args : dict
             Command line arguments.
         """
-        self.__jwt_token = None
         default_config = {
             'development_mode': False,
-            'master_key_path': '~/.config/castor/build_node/build_server.key',
             'master_url': DEFAULT_MASTER_URL,
             'npm_proxy': '',
-            'private_key_path': '~/.config/castor/build_node/'
-                                '{0}.key_secret'.format(platform.node()),
-            'public_key_path': '~/.config/castor/build_node/'
-                               '{0}.key'.format(platform.node()),
             'node_id': self.generate_node_id(),
             'threads_count': DEFAULT_THREADS_COUNT,
             'working_dir': DEFAULT_WORKING_DIR,
@@ -123,17 +107,8 @@ class BuildNodeConfig(BaseConfig):
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
-            'master_key_path': {'type': 'string', 'required': True,
-                                'coerce': normalize_path,
-                                'zmq_public_key': True},
             'master_url': {'type': 'string', 'required': True},
             'npm_proxy': {'type': 'string'},
-            'private_key_path': {'type': 'string', 'required': True,
-                                 'coerce': normalize_path,
-                                 'zmq_private_key': True},
-            'public_key_path': {'type': 'string', 'required': True,
-                                'coerce': normalize_path,
-                                'zmq_public_key': True},
             'node_id': {'type': 'string', 'required': True},
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
             'working_dir': {'type': 'string', 'required': True},
@@ -153,34 +128,10 @@ class BuildNodeConfig(BaseConfig):
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
+            'jwt_token': {'type': 'string', 'nullable': True}
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)
-
-    @property
-    def jwt_token(self):
-        """
-        Returns a build node JWT authentication token which is required for
-        repositories access.
-
-        The token will be extracted from the ZeroMQ Curve private key file on
-        first call.
-
-        Returns
-        -------
-        str
-            JWT authentication token.
-        """
-        if not self.__jwt_token:
-            with open(self.private_key_path, 'r') as fd:
-                for line in fd:
-                    re_rslt = re.search(r'^\s*jwt_token\s*=\s*(\S+)\s*$', line)
-                    if re_rslt:
-                        self.__jwt_token = re_rslt.group(1)
-                        break
-            if not self.__jwt_token:
-                raise ConfigurationError('JWT token is not found')
-        return self.__jwt_token
 
     @property
     def mock_configs_storage_dir(self):

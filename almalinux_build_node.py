@@ -15,8 +15,6 @@ import sys
 import time
 from threading import Event
 
-import zmq
-
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
@@ -99,7 +97,6 @@ def main(sys_args):
         return 2
     configure_logger(args.verbose)
     init_working_dir(config)
-    zmq_context = zmq.Context.instance()
 
     node_terminated = Event()
     node_graceful_terminated = Event()
@@ -109,13 +106,15 @@ def main(sys_args):
         running = False
         logging.info('terminating build node: {0} received'.format(signum))
         node_terminated.set()
-        zmq_context.term()
+        node_graceful_terminated.set()
 
     def sigusr_handler(signum, frame):
         global running
         running = False
         logging.info('terminating build node: {0} received'.format(signum))
+        node_terminated.set()
         node_graceful_terminated.set()
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGUSR1, sigusr_handler)
@@ -123,13 +122,12 @@ def main(sys_args):
     node_globals.init_supervisors(config)
     builders = []
     for i in range(0, config.threads_count):
-        builder = BuildNodeBuilder(zmq_context, config, i, node_terminated,
+        builder = BuildNodeBuilder(config, i, node_terminated,
                                    node_graceful_terminated)
         builders.append(builder)
         builder.start()
 
-    builder_supervisor = BuilderSupervisor(
-        config, builders, zmq_context, node_terminated)
+    builder_supervisor = BuilderSupervisor(config, builders, node_terminated)
     builder_supervisor.start()
 
     while running:
