@@ -23,6 +23,7 @@ import zmq
 from build_node.builders import get_suitable_builder
 from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.uploaders.pulp import PulpRpmUploader
+from build_node.uploaders.s3 import S3LogsUploader
 from build_node.utils.file_utils import clean_dir, rm_sudo
 from build_node.utils.sentry_utils import Sentry
 from build_node.utils.zmq_utils import setup_client_socket, DealerRepCommunicator
@@ -71,9 +72,13 @@ class BuildNodeBuilder(threading.Thread):
         self.__sentry = Sentry(config.sentry_dsn)
         # current task builder object
         self.__builder = None
-        self._uploader = PulpRpmUploader(
+        self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
             self.__config.pulp_password, self.__config.pulp_chunk_size
+        )
+        self._s3_uploader = S3LogsUploader(
+            self.__config.s3_bucket, self.__config.s3_secret_access_key,
+            self.__config.s3_access_key_id, self.__config.s3_region
         )
 
         self.__terminated_event = terminated_event
@@ -178,14 +183,11 @@ class BuildNodeBuilder(threading.Thread):
         self.__builder.build()
 
     def __upload_artifacts(self, task, artifacts_dir, task_log_file):
-        self._uploader.upload(artifacts_dir)
-        # TODO: Upload logs to S3
+        self._pulp_uploader.upload(artifacts_dir)
+        s3_upload_dir = task['s3_upload_dir']
+        self._s3_uploader.upload(artifacts_dir, s3_upload_dir=s3_upload_dir)
         build_stats = self.__builder.get_build_stats()
         start_time = datetime.datetime.utcnow()
-        for file_name in os.listdir(artifacts_dir):
-            if file_name.endswith('.log'):
-                self.__upload_artifact(
-                    task, os.path.join(artifacts_dir, file_name))
         end_time = datetime.datetime.utcnow()
         build_stats['upload'] = {'start_ts': start_time, 'end_ts': end_time}
         build_stats['total'] = {'start_ts': self.__start_ts,
@@ -193,8 +195,8 @@ class BuildNodeBuilder(threading.Thread):
         build_stats_path = os.path.join(artifacts_dir, 'build_stats.yml')
         with open(build_stats_path, 'w') as fd:
             fd.write(yaml.dump(build_stats))
-        self.__upload_artifact(task, build_stats_path)
-        self.__upload_artifact(task, task_log_file)
+        self._s3_uploader.upload_single_file(build_stats_path, s3_upload_dir)
+        self._s3_uploader.upload_single_file(task_log_file, s3_upload_dir)
 
     def __upload_artifact(self, task, file_path, chunk_size=4194304):
         """
