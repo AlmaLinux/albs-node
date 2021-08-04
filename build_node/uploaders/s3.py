@@ -6,6 +6,7 @@ import boto3
 from boto3.exceptions import S3UploadFailedError
 
 from build_node.uploaders.base import BaseUploader, UploadError
+from build_node.models import Artifact
 
 
 __all__ = ['S3BaseUploader', 'S3LogsUploader']
@@ -50,7 +51,7 @@ class S3BaseUploader(BaseUploader):
             reference = self._s3_client.generate_presigned_url(
                 'get_object', ExpiresIn=0,
                 Params={'Bucket': self._s3_bucket, 'Key': object_name})
-            return reference
+            return Artifact(name=file_base_name, href=reference, type='s3')
         except (S3UploadFailedError, ValueError) as e:
             self._logger.error(f'Cannot upload artifact {file_path}'
                                f' to S3: {e}')

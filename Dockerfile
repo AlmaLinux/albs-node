@@ -35,7 +35,7 @@ WORKDIR /build-node
 COPY requirements.txt /build-node/requirements.txt
 
 RUN python3 -m venv --system-site-packages env
-RUN /build-node/env/bin/pip install --upgrade pip && /build-node/env/bin/pip install -r requirements.txt && /build-node/env/bin/pip cache purge
+RUN /build-node/env/bin/pip install --upgrade pip==21.1 && /build-node/env/bin/pip install -r requirements.txt && /build-node/env/bin/pip cache purge
 
 COPY ./build_node /build-node/build_node
 COPY almalinux_build_node.py /build-node/almalinux_build_node.py

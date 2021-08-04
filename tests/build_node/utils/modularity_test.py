@@ -8,14 +8,13 @@ build_node.utils.modularity module unit tests.
 
 import datetime
 import random
-from unittest import TestCase
+from unittest import TestCase, mock
 
 # noinspection PyPackageRequirements
 import gi
 gi.require_version('Modulemd', '2.0')
 # noinspection PyPackageRequirements,PyUnresolvedReferences
 from gi.repository import Modulemd
-import mock
 
 from build_node.errors import DataNotFoundError
 from build_node.utils.modularity import (

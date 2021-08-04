@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 import unittest
-import mock
+from unittest import mock
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 from build_node.errors import CommandExecutionError

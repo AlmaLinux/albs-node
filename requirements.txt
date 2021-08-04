@@ -5,24 +5,19 @@ cerberus
 plumbum
 validators
 python-debian
-mockupdb
 configparser
 requests
 raven
 GitPython==2.1.10
 gitdb2==2.0.6
 pygments
-u-msgpack-python
 retrying
 lmdb
 #rpm Conflicts with python3-rpm
 pyicu
 pebble
 pyyaml
-mock
-memoization
 filesplit==3.0.2
-pulp-rpm-client==3.14.0
 pulpcore-client==3.14.3
 boto3==1.18.7
-pydantic
+pydantic==1.8.1

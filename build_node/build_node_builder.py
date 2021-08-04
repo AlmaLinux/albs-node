@@ -118,7 +118,7 @@ class BuildNodeBuilder(threading.Thread):
             finally:
                 if not success:
                     try:
-                        self.__upload_artifacts(
+                        build_artifacts = self.__upload_artifacts(
                             task, artifacts_dir, task_log_file)
                         if excluded_exception is not None:
                             self.__report_excluded_task(
@@ -165,9 +165,14 @@ class BuildNodeBuilder(threading.Thread):
         self.__builder.build()
 
     def __upload_artifacts(self, task, artifacts_dir, task_log_file):
-        self._pulp_uploader.upload(artifacts_dir)
-        s3_upload_dir = task['s3_upload_dir']
-        self._s3_uploader.upload(artifacts_dir, s3_upload_dir=s3_upload_dir)
+        artifacts = self._pulp_uploader.upload(artifacts_dir)
+        s3_upload_dir = task.s3_artifacts_dir
+        artifacts.extend(
+            self._s3_uploader.upload(
+                artifacts_dir,
+                s3_upload_dir=s3_upload_dir
+            )
+        )
         build_stats = self.__builder.get_build_stats()
         start_time = datetime.datetime.utcnow()
         end_time = datetime.datetime.utcnow()
@@ -177,8 +182,17 @@ class BuildNodeBuilder(threading.Thread):
         build_stats_path = os.path.join(artifacts_dir, 'build_stats.yml')
         with open(build_stats_path, 'w') as fd:
             fd.write(yaml.dump(build_stats))
-        self._s3_uploader.upload_single_file(build_stats_path, s3_upload_dir)
-        self._s3_uploader.upload_single_file(task_log_file, s3_upload_dir)
+        artifacts.append(
+            self._s3_uploader.upload_single_file(
+                build_stats_path, s3_upload_dir
+            )
+        )
+        artifacts.append(
+            self._s3_uploader.upload_single_file(
+                task_log_file, s3_upload_dir
+            )
+        )
+        return artifacts
 
     def __upload_artifact(self, task, file_path, chunk_size=4194304):
         """
