@@ -8,8 +8,8 @@ import os
 import unittest
 import tempfile
 import shutil
+from unittest import mock
 
-import mock
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 from build_node.utils.file_utils import clean_dir, normalize_path, urljoin_path, \

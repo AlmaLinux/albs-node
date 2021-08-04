@@ -13,6 +13,7 @@ from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
 
 from build_node.uploaders.base import BaseUploader, UploadError
 from build_node.utils.file_utils import hash_file
+from build_node.models import Artifact
 
 
 __all__ = ['PulpBaseUploader', 'PulpRpmUploader']
@@ -206,15 +207,18 @@ class PulpBaseUploader(BaseUploader):
             List of the references to the artifacts inside Pulp
 
         """
-        artifact_references = []
+        artifacts = []
         errored_uploads = []
         for artifact in self.get_artifacts_list(artifacts_dir):
             try:
                 reference = self._send_file(artifact)
-                artifact_references.append({
-                    'pulp_href': reference,
-                    'name': os.path.basename(artifact)
-                })
+                artifacts.append(
+                    Artifact(
+                        name=os.path.basename(artifact),
+                        href=reference,
+                        type='pulp_rpm'
+                    )
+                )
             except Exception as e:
                 self._logger.error(f'Cannot upload {artifact}, error: {e}',
                                    exc_info=e)
@@ -223,7 +227,7 @@ class PulpBaseUploader(BaseUploader):
         #  in case of errors during upload.
         if errored_uploads:
             raise UploadError(f'Unable to upload files: {errored_uploads}')
-        return artifact_references
+        return artifacts
 
 
 class PulpRpmUploader(PulpBaseUploader):

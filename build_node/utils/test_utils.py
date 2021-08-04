@@ -12,12 +12,8 @@ import os
 import shutil
 import sys
 import tempfile
-import unittest
 
-import pymongo
-import mockupdb
-
-__all__ = ['MOCK_COMMAND_TEMPLATE', 'MockShellCommand', 'MockupDBTestCase',
+__all__ = ['MOCK_COMMAND_TEMPLATE', 'MockShellCommand',
            'unload_plumbum_modules', 'change_cwd']
 
 
@@ -117,24 +113,6 @@ class MockShellCommand(object):
                 shutil.rmtree(self.__command_dir)
         if self.__output_file and os.path.exists(self.__output_file):
             os.remove(self.__output_file)
-
-
-class MockupDBTestCase(unittest.TestCase):
-
-    """
-    Base class for unit tests using the MockupDB library.
-    """
-
-    def setUp(self):
-        self.mongo_server = mockupdb.MockupDB()
-        self.mongo_server.autoresponds('ismaster', maxWireVersion=6)
-        self.mongo_server.run()
-        self.mongo_client = pymongo.MongoClient(self.mongo_server.uri)
-        self.mongo_db = self.mongo_client['cla']
-
-    def tearDown(self):
-        self.mongo_client.close()
-        self.mongo_server.stop()
 
 
 def unload_plumbum_modules(test_module):

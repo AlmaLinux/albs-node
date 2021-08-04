@@ -12,7 +12,7 @@ import time
 import os
 
 import logging
-from mock import patch, Mock
+from unittest.mock import patch, Mock
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 from build_node.build_node_errors import BuildConfigurationError

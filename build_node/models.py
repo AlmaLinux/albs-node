@@ -46,3 +46,11 @@ class Task(BaseModel):
 
     def is_srpm_build_required(self):
         return self.ref.ref_type != 'srpm'
+
+
+class Artifact(BaseModel):
+
+    name: str
+    # pulp_rpm or s3
+    type: str
+    href: str

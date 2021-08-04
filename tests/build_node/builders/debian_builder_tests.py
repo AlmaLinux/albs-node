@@ -8,9 +8,9 @@ import re
 import os
 import shutil
 import unittest
+from unittest import mock
 
 import pyfakefs.fake_filesystem_unittest
-import mock
 
 from build_node.builders.debian_builder import DebianBuilder
 from build_node.errors import CommandExecutionError
