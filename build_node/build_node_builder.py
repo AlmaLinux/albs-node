@@ -87,11 +87,12 @@ class BuildNodeBuilder(threading.Thread):
             self.__start_ts = datetime.datetime.utcnow()
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(task_dir, 'alt.log')
+            task_log_file = os.path.join(task_dir, 'albs.log')
             task_log_handler = None
             success = False
             excluded = False
             excluded_exception = None
+            build_artifacts = []
             try:
                 self.__logger.info(f'processing the task:\n{task}')
                 os.makedirs(artifacts_dir)
@@ -223,10 +224,12 @@ class BuildNodeBuilder(threading.Thread):
         self.__call_master('build_excluded', **kwargs)
 
     def __report_done_task(self, task, success=True, artifacts=None):
+        if not artifacts:
+            artifacts = []
         kwargs = {
             'task_id': task.id,
             'success': success,
-            'artifacts': artifacts
+            'artifacts': [artifact.dict() for artifact in artifacts]
         }
         self.__call_master('build_done', **kwargs)
 

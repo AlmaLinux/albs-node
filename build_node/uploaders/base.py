@@ -12,8 +12,7 @@ class UploadError(Exception):
 
 class BaseUploader(object):
 
-    @staticmethod
-    def get_artifacts_list(artifacts_dir: str) -> typing.List[str]:
+    def get_artifacts_list(self, artifacts_dir: str) -> typing.List[str]:
         """
         Returns the list of the files in artifacts directory
         that need to be uploaded.
@@ -29,8 +28,11 @@ class BaseUploader(object):
             List of files.
 
         """
-        _, _, files = os.walk(artifacts_dir)
-        return files
+        return [
+            os.path.join(artifacts_dir, file)
+            for file in os.listdir(artifacts_dir)
+            if not os.path.isdir(file)
+        ]
 
     @abstractmethod
     def upload(self, artifacts_dir: str, **kwargs) -> typing.List[str]:

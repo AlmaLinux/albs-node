@@ -90,7 +90,7 @@ class PulpBaseUploader(BaseUploader):
             result = self._tasks_client.read(task_href)
         if result.state == 'failed':
             raise TaskFailedError(f'task {task_href} has failed, '
-                                  f'details: {result.get("error")}')
+                                  f'details: {result}')
         return result
 
     def _create_upload(self, file_path: str) -> (str, int):
@@ -172,27 +172,6 @@ class PulpBaseUploader(BaseUploader):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
-    def get_artifacts_list(artifacts_dir: str):
-        """
-        Returns the list of the files in artifacts directory
-        that need to be uploaded.
-
-        Parameters
-        ----------
-        artifacts_dir : str
-            Path to artifacts directory.
-
-        Returns
-        -------
-        list
-            List of files.
-
-        """
-        return [
-            file for file in os.listdir(artifacts_dir)
-            if not os.path.isdir(file)
-        ]
-
     def upload(self, artifacts_dir: str) -> List[str]:
         """
 
@@ -216,7 +195,7 @@ class PulpBaseUploader(BaseUploader):
                     Artifact(
                         name=os.path.basename(artifact),
                         href=reference,
-                        type='pulp_rpm'
+                        type='rpm'
                     )
                 )
             except Exception as e:

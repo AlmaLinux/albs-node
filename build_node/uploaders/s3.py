@@ -51,7 +51,11 @@ class S3BaseUploader(BaseUploader):
             reference = self._s3_client.generate_presigned_url(
                 'get_object', ExpiresIn=0,
                 Params={'Bucket': self._s3_bucket, 'Key': object_name})
-            return Artifact(name=file_base_name, href=reference, type='s3')
+            return Artifact(
+                name=file_base_name,
+                href=reference,
+                type='build_log'
+            )
         except (S3UploadFailedError, ValueError) as e:
             self._logger.error(f'Cannot upload artifact {file_path}'
                                f' to S3: {e}')
@@ -74,7 +78,6 @@ class S3BaseUploader(BaseUploader):
 
 class S3LogsUploader(S3BaseUploader):
 
-    @staticmethod
-    def get_artifacts_list(artifacts_dir: str) -> typing.List['str']:
+    def get_artifacts_list(self, artifacts_dir: str) -> typing.List['str']:
         all_files = super().get_artifacts_list(artifacts_dir)
         return [file_ for file_ in all_files if file_.endswith('.log')]
