@@ -14,13 +14,14 @@ import traceback
 import yaml
 
 from build_node.mock.mock_environment import MockError
-from build_node.mock.mock_config import (MockConfig, MockBindMountPluginConfig,
-                                         MockChrootFile)
+from build_node.mock.mock_config import (
+    MockConfig, MockBindMountPluginConfig, MockChrootFile
+)
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.utils.file_utils import safe_mkdir, chown_recursive
-from build_node.utils.git_utils import git_get_commit_id, git_init_repo
 from build_node.utils.git_utils import (
-    MirroredGitRepo, WrappedGitRepo, git_checkout
+    MirroredGitRepo, WrappedGitRepo, git_checkout, git_init_repo,
+    git_get_commit_id
 )
 from .. import build_node_globals as node_globals
 
@@ -83,8 +84,6 @@ class BaseBuilder(object):
         self.task = task
         self.task_dir = task_dir
         self.artifacts_dir = artifacts_dir
-        self.builder_kwargs = task['build'].get('builder',
-                                                {}).get('kwargs', {})
         # created git tag name
         self.created_tag = None
         self._build_stats = {}
@@ -93,8 +92,7 @@ class BaseBuilder(object):
         else:
             self._pre_build_hook_target_arch = 'x86_64'
 
-    def checkout_git_sources(self, git_sources_dir, ref, ref_type, uri,
-                             **kwargs):
+    def checkout_git_sources(self, git_sources_dir, ref):
         """
         Checkouts a project sources from the specified git repository.
 
@@ -118,23 +116,22 @@ class BaseBuilder(object):
         cla.utils.alt_git_repo.WrappedGitRepo
             Git repository wrapper.
         """
-
         self.logger.info('checking out {0} {1} from {2}'.format(
-            ref_type, ref, uri))
-        if ref_type == 'gerrit_change':
+            ref.ref_type, ref.git_ref, ref.url))
+        if ref.ref_type == 'gerrit_change':
             git_init_repo(git_sources_dir)
             repo = WrappedGitRepo(git_sources_dir)
-            repo.fetch(uri, ref, depth=1)
+            repo.fetch(ref.url, ref, depth=1)
             git_checkout(git_sources_dir, 'FETCH_HEAD')
         else:
             # FIXME: Understand why sometimes we hold repository lock more
             #  than 60 seconds
             with MirroredGitRepo(
-                    uri, self.config.git_repos_cache_dir,
+                    ref.url, self.config.git_repos_cache_dir,
                     self.config.git_cache_locks_dir,
                     timeout=600) as cached_repo:
                 repo = cached_repo.clone_to(git_sources_dir)
-                repo.checkout(ref)
+                repo.checkout(ref.git_ref)
         self.__log_commit_id(git_sources_dir)
         return repo
 
@@ -270,12 +267,12 @@ class BaseBuilder(object):
         if self._pre_build_hook_target_arch == 'aarch64':
             yum_repos = [
                 YumRepositoryConfig(repositoryid='centos7-os', name='centos7-os',
-                                    baseurl=f'http://mirror.centos.org/'
-                                            f'altarch/7/os/aarch64/'),
+                                    baseurl='http://mirror.centos.org/'
+                                            'altarch/7/os/aarch64/'),
                 YumRepositoryConfig(repositoryid='centos7-updates',
                                     name='centos7-updates',
-                                    baseurl=f'http://mirror.centos.org/altarch/7'
-                                            f'/updates/aarch64/')
+                                    baseurl='http://mirror.centos.org/altarch/7'
+                                            '/updates/aarch64/')
             ]
         else:
             yum_repos = [
@@ -325,6 +322,7 @@ class BaseBuilder(object):
         bind_plugin = MockBindMountPluginConfig(True, [(git_sources_dir,
                                                         '/srv/pre_build/')])
         mock_config.add_plugin(bind_plugin)
+        # FIXME:
         macros = self.task['build'].get('definitions')
         platform = self.task['meta']['platform']
         project_name = self.task['build']['project_name']
@@ -380,7 +378,7 @@ class BaseBuilder(object):
         -------
         int or None
         """
-        return self.task['build'].get('timeout')
+        return self.task.platform.data.get('timeout')
 
     @property
     def mock_supervisor(self):

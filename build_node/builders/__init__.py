@@ -6,10 +6,8 @@
 Builder implementations for CloudLinux Build System.
 """
 
-from build_node.utils.debian_utils import detect_debian
-from .base_rpm_builder import BaseRPMBuilder
-from .kernel_builder import KernelBuilder
-from .debian_builder import DebianBuilder, DebianARMHFBuilder
+from build_node.builders.base_rpm_builder import BaseRPMBuilder
+from build_node.builders.debian_builder import DebianBuilder
 
 __all__ = ['get_suitable_builder']
 
@@ -29,12 +27,9 @@ def get_suitable_builder(task):
         Builder class.
     """
     # TODO: detect other types of builders
-    builder = task['build'].get('builder', {})
-    if builder.get('class') == 'CL6LveKernelBuilder':
-        return KernelBuilder
-    elif (task['meta'].get('arch') == 'armhf'
-          and task['meta'].get('platform', '').startswith('raspbian')):
-        return DebianARMHFBuilder
-    elif detect_debian(task['meta'].get('platform')):
+    if task.platform.type == 'rpm':
+        return BaseRPMBuilder
+    elif task.platform.type == 'deb':
         return DebianBuilder
-    return BaseRPMBuilder
+    else:
+        raise ValueError(f'Unknown platform type: {task.platform.type}')

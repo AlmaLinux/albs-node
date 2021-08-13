@@ -11,6 +11,8 @@ RUN dnf install -y epel-release && \
         python3-apt keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring qemu-user-static && \
     dnf clean all
 
+RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
+
 RUN mkdir -p \
     /srv/alternatives/castor/build_node \
     /var/cache/pbuilder/aptcache/ \
@@ -29,13 +31,16 @@ RUN mkdir -p \
     /root/.config/cl-alternatives/
 
 WORKDIR /build-node
-COPY ./build_node /build-node/build_node
-COPY almalinux_build_node.py /build-node/almalinux_build_node.py
+
 COPY requirements.txt /build-node/requirements.txt
 
 RUN python3 -m venv --system-site-packages env
-RUN /build-node/env/bin/pip install --upgrade pip && /build-node/env/bin/pip install -r requirements.txt && /build-node/env/bin/pip cache purge
+RUN /build-node/env/bin/pip install --upgrade pip==21.1 && /build-node/env/bin/pip install -r requirements.txt && /build-node/env/bin/pip cache purge
 
+COPY ./build_node /build-node/build_node
+COPY almalinux_build_node.py /build-node/almalinux_build_node.py
+
+# FIXME:
 # COPY ./tests /build-node/tests
 # RUN /build-node/env/bin/py.test tests
 
