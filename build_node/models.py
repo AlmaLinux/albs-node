@@ -39,6 +39,7 @@ class Task(BaseModel):
 
     id: int
     arch: str
+    s3_artifacts_dir: str
     ref: TaskRef
     platform: TaskPlatform
     created_by: TaskCreatedBy
