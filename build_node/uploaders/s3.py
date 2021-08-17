@@ -5,7 +5,11 @@ import typing
 import boto3
 from boto3.exceptions import S3UploadFailedError
 
-from build_node.uploaders.base import BaseUploader, UploadError
+from build_node.uploaders.base import (
+    BaseUploader,
+    BaseLogsUploader,
+    UploadError,
+)
 from build_node.models import Artifact
 
 
@@ -25,7 +29,7 @@ class S3BaseUploader(BaseUploader):
         self._s3_bucket = bucket
         self._logger = logging.getLogger(__file__)
 
-    def upload_single_file(self, file_path: str, s3_upload_dir: str) -> str:
+    def upload_single_file(self, file_path: str, s3_upload_dir: str) -> Artifact:
         """
         Uploads provided file into provided directory on S3
 
@@ -38,8 +42,8 @@ class S3BaseUploader(BaseUploader):
 
         Returns
         -------
-        str
-            URL to the file.
+        Artifact
+            Artifact object that describes the file
 
         """
         file_base_name = os.path.basename(file_path)
@@ -54,13 +58,13 @@ class S3BaseUploader(BaseUploader):
             return Artifact(
                 name=file_base_name,
                 href=reference,
-                type='build_log'
+                type=self.ITEM_TYPE
             )
         except (S3UploadFailedError, ValueError) as e:
             self._logger.error(f'Cannot upload artifact {file_path}'
                                f' to S3: {e}')
 
-    def upload(self, artifacts_dir: str, **kwargs) -> typing.List[str]:
+    def upload(self, artifacts_dir: str, **kwargs) -> typing.List[Artifact]:
         # To avoid warning about signature we assume that `s3_upload_dir`
         # is required keyword argument.
         if not kwargs.get('s3_upload_dir'):
@@ -76,8 +80,5 @@ class S3BaseUploader(BaseUploader):
         return references
 
 
-class S3LogsUploader(S3BaseUploader):
-
-    def get_artifacts_list(self, artifacts_dir: str) -> typing.List['str']:
-        all_files = super().get_artifacts_list(artifacts_dir)
-        return [file_ for file_ in all_files if file_.endswith('.log')]
+class S3LogsUploader(BaseLogsUploader, S3BaseUploader):
+    pass

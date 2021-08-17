@@ -21,3 +21,4 @@ filesplit==3.0.2
 pulpcore-client==3.14.3
 boto3==1.18.7
 pydantic==1.8.1
+azure-storage-blob==12.8.1

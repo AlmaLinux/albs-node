@@ -27,6 +27,8 @@ DEFAULT_S3_REGION = ''
 DEFAULT_S3_BUCKET = ''
 DEFAULT_S3_SECRET_ACCESS_KEY = ''
 DEFAULT_S3_ACCESS_KEY_ID = ''
+DEFAULT_AZURE_CONN_STR = ''
+DEFAULT_AZURE_CONTAINER = ''
 
 __all__ = ['BuildNodeConfig']
 
@@ -104,6 +106,8 @@ class BuildNodeConfig(BaseConfig):
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
+            'azure_connection_string': DEFAULT_AZURE_CONN_STR,
+            'azure_container': DEFAULT_AZURE_CONTAINER,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -128,6 +132,8 @@ class BuildNodeConfig(BaseConfig):
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
+            'azure_connection_string': {'type': 'string', 'nullable': False},
+            'azure_container': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True}
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,

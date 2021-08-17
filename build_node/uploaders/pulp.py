@@ -24,6 +24,7 @@ class TaskFailedError(Exception):
 
 
 class PulpBaseUploader(BaseUploader):
+    ITEM_TYPE = 'package'
     """
     Handles uploads to Pulp server.
     """
@@ -172,7 +173,7 @@ class PulpBaseUploader(BaseUploader):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
-    def upload(self, artifacts_dir: str) -> List[str]:
+    def upload(self, artifacts_dir: str) -> List[Artifact]:
         """
 
         Parameters
@@ -195,7 +196,7 @@ class PulpBaseUploader(BaseUploader):
                     Artifact(
                         name=os.path.basename(artifact),
                         href=reference,
-                        type='rpm'
+                        type=self.ITEM_TYPE
                     )
                 )
             except Exception as e:
@@ -210,6 +211,7 @@ class PulpBaseUploader(BaseUploader):
 
 
 class PulpRpmUploader(PulpBaseUploader):
+    ITEM_TYPE = 'rpm'
 
     def get_artifacts_list(self, artifacts_dir: str) -> List[str]:
         """

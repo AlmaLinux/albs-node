@@ -20,8 +20,8 @@ import requests
 
 from build_node.builders import get_suitable_builder
 from build_node.build_node_errors import BuildError, BuildExcluded
+from build_node.uploaders.azure import AzureLogsUploader
 from build_node.uploaders.pulp import PulpRpmUploader
-from build_node.uploaders.s3 import S3LogsUploader
 from build_node.utils.file_utils import clean_dir, rm_sudo
 from build_node.models import Task
 from build_node.utils.sentry_utils import Sentry
@@ -64,9 +64,9 @@ class BuildNodeBuilder(threading.Thread):
             self.__config.pulp_host, self.__config.pulp_user,
             self.__config.pulp_password, self.__config.pulp_chunk_size
         )
-        self._s3_uploader = S3LogsUploader(
-            self.__config.s3_bucket, self.__config.s3_secret_access_key,
-            self.__config.s3_access_key_id, self.__config.s3_region
+        self._logs_uploader = AzureLogsUploader(
+            self.__config.azure_connection_string,
+            self.__config.azure_container,
         )
 
         self.__terminated_event = terminated_event
@@ -167,11 +167,11 @@ class BuildNodeBuilder(threading.Thread):
 
     def __upload_artifacts(self, task, artifacts_dir, task_log_file):
         artifacts = self._pulp_uploader.upload(artifacts_dir)
-        s3_upload_dir = task.s3_artifacts_dir
+        azure_upload_dir = task.azure_artifacts_dir
         artifacts.extend(
-            self._s3_uploader.upload(
+            self._logs_uploader.upload(
                 artifacts_dir,
-                s3_upload_dir=s3_upload_dir
+                azure_upload_dir=azure_upload_dir
             )
         )
         build_stats = self.__builder.get_build_stats()
@@ -184,13 +184,13 @@ class BuildNodeBuilder(threading.Thread):
         with open(build_stats_path, 'w') as fd:
             fd.write(yaml.dump(build_stats))
         artifacts.append(
-            self._s3_uploader.upload_single_file(
-                build_stats_path, s3_upload_dir
+            self._logs_uploader.upload_single_file(
+                build_stats_path, azure_upload_dir
             )
         )
         artifacts.append(
-            self._s3_uploader.upload_single_file(
-                task_log_file, s3_upload_dir
+            self._logs_uploader.upload_single_file(
+                task_log_file, azure_upload_dir
             )
         )
         return artifacts

@@ -2,8 +2,10 @@ import os
 import typing
 from abc import abstractmethod
 
+from build_node.models import Artifact
 
-__all__ = ['BaseUploader', 'UploadError']
+
+__all__ = ['BaseUploader', 'BaseLogsUploader', 'UploadError']
 
 
 class UploadError(Exception):
@@ -11,6 +13,7 @@ class UploadError(Exception):
 
 
 class BaseUploader(object):
+    ITEM_TYPE: str = 'blob'
 
     def get_artifacts_list(self, artifacts_dir: str) -> typing.List[str]:
         """
@@ -35,5 +38,13 @@ class BaseUploader(object):
         ]
 
     @abstractmethod
-    def upload(self, artifacts_dir: str, **kwargs) -> typing.List[str]:
+    def upload(self, artifacts_dir: str, **kwargs) -> typing.List[Artifact]:
         raise NotImplementedError()
+
+
+class BaseLogsUploader(BaseUploader):
+    ITEM_TYPE: str = 'build_log'
+
+    def get_artifacts_list(self, artifacts_dir: str) -> typing.List['str']:
+        all_files = super().get_artifacts_list(artifacts_dir)
+        return [file_ for file_ in all_files if file_.endswith('.log')]
