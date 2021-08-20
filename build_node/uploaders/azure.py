@@ -70,7 +70,9 @@ class AzureBaseUploader(BaseUploader):
             raise UploadError(self.argument_required_message)
         azure_upload_dir = kwargs.get('azure_upload_dir')
         for file_ in self.get_artifacts_list(artifacts_dir):
-            artifacts.append(self.upload_single_file(file_, azure_upload_dir))
+            artifact = self.upload_single_file(file_, azure_upload_dir)
+            if artifact:
+                artifacts.append(artifact)
         return artifacts
 
 
