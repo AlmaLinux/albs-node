@@ -418,8 +418,7 @@ def http_file_download(url, fd, timeout=300, login=None, password=None,
     status_code = curl.getinfo(pycurl.RESPONSE_CODE)
     if status_code not in (200, 206, 302):
         curl.close()
-        raise Exception("cannot download: {0} status code".
-                        format(status_code))
+        raise Exception(f'cannot download {url} ({status_code} status code)')
     real_url = urllib.parse.unquote(curl.getinfo(pycurl.EFFECTIVE_URL))
     curl.close()
     return real_url

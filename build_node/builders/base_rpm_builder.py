@@ -32,8 +32,7 @@ from build_node.mock.mock_config import (
 from build_node.mock.mock_environment import MockError
 from build_node.utils.rpm_utils import unpack_src_rpm
 from build_node.utils.file_utils import download_file
-from build_node.utils.spec_utils import add_gerrit_ref_to_spec
-
+from build_node.utils.git_sources_utils import AlmaSourceDownloader
 from build_node.utils.index_utils import extract_metadata
 from build_node.utils.spec_parser import SpecParser, SpecSource
 from build_node.ported import to_unicode
@@ -82,24 +81,28 @@ class BaseRPMBuilder(BaseBuilder):
         #       the same with project name or name that starts with projectname
         #       then will be found the last of specs in alphabet order
         #       e.g. `securelve.spec` for `cagefs` project
+        src_suffix_dir = None
         try:
             if self.task.is_srpm_build_required():
                 git_sources_dir = os.path.join(self.task_dir, 'git_sources')
                 os.makedirs(git_sources_dir)
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
+                if self.task.is_alma_source():
+                    self.prepare_alma_sources(git_sources_dir)
+                    if os.path.exists(os.path.join(
+                            git_sources_dir, 'SOURCES')):
+                        src_suffix_dir = 'SOURCES'
                 self.execute_pre_build_hook(git_sources_dir)
                 source_srpm_dir = os.path.join(
                     self.task_dir, 'source_srpm')
                 os.makedirs(source_srpm_dir)
                 spec_file = self.prepare_koji_sources(
-                    git_repo, git_sources_dir, source_srpm_dir)
-                module = '.module' in self.task.platform.data.get(
-                    'definitions', {}).get('dist', '')
-                if self.task.ref.ref_type == 'gerrit_change':
-                    add_gerrit_ref_to_spec(spec_file, self.task.ref.git_ref)
-                elif self.task.ref.ref_type == 'branch' and not module:
-                    add_gerrit_ref_to_spec(spec_file)
+                    git_repo,
+                    git_sources_dir,
+                    source_srpm_dir,
+                    src_suffix_dir=src_suffix_dir
+                )
             else:
                 source_srpm_dir = self.unpack_sources()
                 spec_file = self.locate_spec_file(source_srpm_dir)
@@ -224,6 +227,10 @@ class BaseRPMBuilder(BaseBuilder):
         self.logger.info('Sources are prepared')
         return src_dir
 
+    def prepare_alma_sources(self, git_sources_dir: str):
+        downloader = AlmaSourceDownloader(git_sources_dir)
+        downloader.download_all()
+
     def prepare_koji_sources(self, git_repo, git_sources_dir, output_dir,
                              src_suffix_dir=None):
         """
@@ -251,41 +258,30 @@ class BaseRPMBuilder(BaseBuilder):
             spec_path, self.task.platform.data.get('definitions')
         )
         tarball_path = None
-        tarball_name = None
         for source in itertools.chain(parsed_spec.source_package.sources,
                                       parsed_spec.source_package.patches):
-            if source.position == 0 and isinstance(source, SpecSource):
-                tarball_path = os.path.join(output_dir, source.name)
-                tarball_name = source.name
+            parsed_url = urllib.parse.urlparse(source.name)
+            if parsed_url.scheme == '':
+                file_name = os.path.split(source.name)[1]
             else:
-                parsed_url = urllib.parse.urlparse(source.name)
-                if parsed_url.scheme == '':
-                    file_name = os.path.split(source.name)[1]
-                else:
-                    # TODO: verify that it works with all valid remote URLs
-                    file_name = os.path.basename(parsed_url.path)
-                if not src_suffix_dir:
-                    source_path = os.path.join(git_sources_dir, file_name)
-                else:
-                    source_path = os.path.join(git_sources_dir, src_suffix_dir,
-                                               file_name)
-                if os.path.exists(source_path):
-                    shutil.copy(source_path, output_dir)
-                elif parsed_url.scheme in ('http', 'https', 'ftp'):
-                    download_file(source.name, output_dir)
-                else:
-                    raise BuildError('can\'t locate {0} source'.
-                                     format(source.name))
-        git_source_tarball = os.path.join(git_sources_dir, tarball_name)
-        if os.path.exists(git_source_tarball):
-            shutil.copy(git_source_tarball, output_dir)
-        else:
+                # TODO: verify that it works with all valid remote URLs
+                file_name = os.path.basename(parsed_url.path)
+            if not src_suffix_dir:
+                source_path = os.path.join(git_sources_dir, file_name)
+            else:
+                source_path = os.path.join(git_sources_dir, src_suffix_dir,
+                                           file_name)
+            if os.path.exists(source_path):
+                shutil.copy(source_path, output_dir)
+            elif parsed_url.scheme in ('http', 'https', 'ftp'):
+                download_file(source.name, output_dir)
+            if source.position == 0 and isinstance(source, SpecSource):
+                tarball_path = os.path.join(output_dir, file_name)
+        if not os.path.exists(tarball_path):
             tarball_prefix = '{0}-{1}/'.format(
                 parsed_spec.source_package.name,
                 parsed_spec.source_package.version)
             git_ref = self.task.ref.git_ref
-            if self.task.ref.ref_type == 'gerrit_change':
-                git_ref = 'HEAD'
             git_repo.archive(git_ref, tarball_path, archive_format='tar.bz2',
                              prefix=tarball_prefix)
         spec_file_name = os.path.basename(spec_path)
@@ -451,9 +447,14 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Spec file path.
         """
-        for filename in os.listdir(sources_dir):
-            if filename.endswith('.spec'):
-                return os.path.join(sources_dir, filename)
+        folders_to_search = [sources_dir]
+        specs_dir = os.path.join(sources_dir, 'SPECS')
+        if os.path.exists(specs_dir):
+            folders_to_search.append(specs_dir)
+        for folder in folders_to_search:
+            for filename in os.listdir(folder):
+                if filename.endswith('.spec'):
+                    return os.path.join(folder, filename)
         raise BuildError('Spec file is not found')
 
     def save_build_artifacts(self, mock_result, srpm_artifacts=False):
