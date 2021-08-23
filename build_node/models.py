@@ -39,7 +39,6 @@ class Task(BaseModel):
 
     id: int
     arch: str
-    s3_artifacts_dir: str
     ref: TaskRef
     platform: TaskPlatform
     created_by: TaskCreatedBy
@@ -47,6 +46,9 @@ class Task(BaseModel):
 
     def is_srpm_build_required(self):
         return self.ref.ref_type != 'srpm'
+
+    def is_alma_source(self):
+        return self.ref.url.startswith('https://git.almalinux.org/')
 
 
 class Artifact(BaseModel):
