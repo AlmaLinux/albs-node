@@ -10,6 +10,7 @@ from pulpcore.client.pulpcore.configuration import Configuration
 from pulpcore.client.pulpcore.api_client import ApiClient
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
+from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 
 from build_node.uploaders.base import BaseUploader, UploadError
 from build_node.utils.file_utils import hash_file
@@ -47,6 +48,7 @@ class PulpBaseUploader(BaseUploader):
         api_client = self._prepare_api_client(host, username, password)
         self._uploads_client = UploadsApi(api_client=api_client)
         self._tasks_client = TasksApi(api_client=api_client)
+        self._artifacts_client = ArtifactsApi(api_client=api_client)
         self._file_splitter = Filesplit()
         self._chunk_size = chunk_size
         self._logger = logging.getLogger(__file__)
@@ -172,6 +174,11 @@ class PulpBaseUploader(BaseUploader):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
+    def check_if_artifact_exists(self, sha256: str) -> str:
+        response = self._artifacts_client.list(sha256=sha256)
+        if response.results:
+            return response.results[0].pulp_href
+
     def upload(self, artifacts_dir: str) -> List[str]:
         """
 
@@ -190,14 +197,7 @@ class PulpBaseUploader(BaseUploader):
         errored_uploads = []
         for artifact in self.get_artifacts_list(artifacts_dir):
             try:
-                reference = self._send_file(artifact)
-                artifacts.append(
-                    Artifact(
-                        name=os.path.basename(artifact),
-                        href=reference,
-                        type='rpm'
-                    )
-                )
+                artifacts.append(self.upload_single_file(artifact))
             except Exception as e:
                 self._logger.error(f'Cannot upload {artifact}, error: {e}',
                                    exc_info=e)
@@ -207,6 +207,30 @@ class PulpBaseUploader(BaseUploader):
         if errored_uploads:
             raise UploadError(f'Unable to upload files: {errored_uploads}')
         return artifacts
+
+    def upload_single_file(self, filename: str) -> Artifact:
+        """
+
+        Parameters
+        ----------
+        artifacts_dir : str
+            Path to files that need to be uploaded.
+
+        Returns
+        -------
+        list
+            List of the references to the artifacts inside Pulp
+
+        """
+        file_sha256 = hash_file(filename, hash_type='sha256')
+        reference = self.check_if_artifact_exists(file_sha256)
+        if not reference:
+            reference = self._send_file(filename)
+        return Artifact(
+            name=os.path.basename(filename),
+            href=reference,
+            type='rpm' if filename.endswith('.rpm') else 'build_log'
+        )
 
 
 class PulpRpmUploader(PulpBaseUploader):
@@ -228,5 +252,12 @@ class PulpRpmUploader(PulpBaseUploader):
             List of files.
 
         """
-        all_files = super().get_artifacts_list(artifacts_dir)
-        return [file_ for file_ in all_files if file_.endswith('.rpm')]
+        artifacts = []
+        for file_ in super().get_artifacts_list(artifacts_dir):
+            if file_.endswith('.rpm'):
+                artifacts.append(file_)
+            elif file_.endswith('.log'):
+                artifacts.append(file_)
+            elif file_.endswith('.cfg'):
+                artifacts.append(file_)
+        return artifacts
