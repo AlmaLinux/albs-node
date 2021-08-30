@@ -23,7 +23,6 @@ except ImportError:
 
 import plumbum
 
-from build_node.constants import REPO_CHANNEL_BUILD
 from build_node.utils.file_utils import download_file
 from build_node.utils.debian_utils import (dpkg_parsechangelog,
                                        add_timestamp_changelog_deb)
@@ -103,23 +102,19 @@ class DebianBuilder(BaseBuilder):
         """
         extra_repos = []
         for repo in self.task['build'].get('repositories', ()):
-            if repo.get('channel') == REPO_CHANNEL_BUILD:
-                # We need to exclude current build repo if it's empty
-                # as it causes pbuilder to fail
-                is_empty = self._is_empty_repo(
-                    repo['url'],
-                    login=self.config.node_id,
-                    password=self.config.jwt_token,
-                    no_ssl_verify=self.config.development_mode
-                )
-                if not is_empty:
-                    auth_url = self.add_url_credentials(repo['url'],
-                                                        self.config.node_id,
-                                                        self.config.jwt_token)
-                    extra_repos.append('deb {0} ./'.format(auth_url))
-            else:
-                raise BuildError('unsupported repository channel {0} for {1}'.
-                                 format(repo.get('channel'), repo['url']))
+            # We need to exclude current build repo if it's empty
+            # as it causes pbuilder to fail
+            is_empty = self._is_empty_repo(
+                repo['url'],
+                login=self.config.node_id,
+                password=self.config.jwt_token,
+                no_ssl_verify=self.config.development_mode
+            )
+            if not is_empty:
+                auth_url = self.add_url_credentials(repo['url'],
+                                                    self.config.node_id,
+                                                    self.config.jwt_token)
+                extra_repos.append('deb {0} ./'.format(auth_url))
 
         extra_repos.extend(self.config_vars.get('othermirror', []))
         extra_mirrors = '|'.join(extra_repos)
@@ -174,11 +169,6 @@ class DebianBuilder(BaseBuilder):
         find_changelogs = find_files(prep_src_dir, r'changelog')
         find_changelog = [x for x in find_changelogs
                           if '/debian/changelog' in x][0]
-        if self.task['build']['git'].get('ref_type') == 'gerrit_change':
-            add_timestamp_changelog_deb(find_changelog, source_name,
-                                        self.task['build']['git'].get('ref'))
-        elif self.task['build']['git'].get('ref_type') == 'branch':
-            add_timestamp_changelog_deb(find_changelog, source_name)
         self.logger.info('Starting packages build')
         try:
             # On this position system gets a copy of base image

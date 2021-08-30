@@ -102,36 +102,22 @@ class BaseBuilder(object):
             Target directory path.
         ref : str
             Git (gerrit) reference.
-        ref_type : str
-            Git (gerrit) reference type (e.g. gerrit_change).
-        uri : str
-            Git repository URL.
-        kwargs : dict
-            Optional keyword arguments list. It should be removed after a
-            build job structure refactoring because we don't need other
-            information in the build["git"] item's field.
 
         Returns
         -------
         cla.utils.alt_git_repo.WrappedGitRepo
             Git repository wrapper.
         """
-        self.logger.info('checking out {0} {1} from {2}'.format(
-            ref.ref_type, ref.git_ref, ref.url))
-        if ref.ref_type == 'gerrit_change':
-            git_init_repo(git_sources_dir)
-            repo = WrappedGitRepo(git_sources_dir)
-            repo.fetch(ref.url, ref, depth=1)
-            git_checkout(git_sources_dir, 'FETCH_HEAD')
-        else:
-            # FIXME: Understand why sometimes we hold repository lock more
-            #  than 60 seconds
-            with MirroredGitRepo(
-                    ref.url, self.config.git_repos_cache_dir,
-                    self.config.git_cache_locks_dir,
-                    timeout=600) as cached_repo:
-                repo = cached_repo.clone_to(git_sources_dir)
-                repo.checkout(ref.git_ref)
+        self.logger.info('checking out {0} from {1}'.format(
+            ref.git_ref, ref.url))
+        # FIXME: Understand why sometimes we hold repository lock more
+        #  than 60 seconds
+        with MirroredGitRepo(
+                ref.url, self.config.git_repos_cache_dir,
+                self.config.git_cache_locks_dir,
+                timeout=600) as cached_repo:
+            repo = cached_repo.clone_to(git_sources_dir)
+            repo.checkout(ref.git_ref)
         self.__log_commit_id(git_sources_dir)
         return repo
 

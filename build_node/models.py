@@ -10,12 +10,10 @@ class TaskRepo(BaseModel):
 
     name: str
     url: str
-    channel = 0
 
 
 class TaskRef(BaseModel):
 
-    ref_type: str
     url: str
     git_ref: typing.Optional[str]
 
@@ -45,7 +43,7 @@ class Task(BaseModel):
     repositories: typing.List[TaskRepo]
 
     def is_srpm_build_required(self):
-        return self.ref.ref_type != 'srpm'
+        return not self.ref.url.endswith('src.rpm')
 
     def is_alma_source(self):
         return self.ref.url.startswith('https://git.almalinux.org/')
