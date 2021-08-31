@@ -22,7 +22,6 @@ from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
     BuildError, BuildConfigurationError, BuildExcluded
 )
-from build_node.constants import REPO_CHANNEL_BUILD
 from build_node.mock.error_detector import build_log_excluded_arch
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.mock.mock_config import (
@@ -336,18 +335,11 @@ class BaseRPMBuilder(BaseBuilder):
         """
         yum_repos = []
         for repo in task.repositories:
-            auth_params = {}
-            if repo.channel == REPO_CHANNEL_BUILD:
-                auth_params['username'] = config.node_id
-                auth_params['password'] = config.jwt_token
-                auth_params['sslverify'] = \
-                    '0' if config.development_mode else '1'
             yum_repos.append(
                 YumRepositoryConfig(
                     repositoryid=repo.name,
                     name=repo.name,
-                    baseurl=repo.url,
-                    **auth_params)
+                    baseurl=repo.url)
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,

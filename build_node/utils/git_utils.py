@@ -194,7 +194,9 @@ def git_ls_remote(repo_path, heads=False, tags=False):
         re_rslt = re.search(r'^([a-zA-Z0-9]{40})\s*\w+/(\w+)/(\S+)$', line)
         if not re_rslt:
             continue
+        logging.info(f'\nRE RESULT\n{re_rslt}\n')
         commit_id, ref_type, ref = re_rslt.groups()
+        logging.info(f'\nREF TYPE GIT UTILS\n{ref_type}\n')
         if ref.endswith('^{}'):
             # NOTE: see http://stackoverflow.com/q/15472107 for details
             continue

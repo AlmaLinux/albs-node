@@ -79,10 +79,6 @@ class KernelBuilder(BaseRPMBuilder):
             Path to kernel sources
 
         """
-
-        def ref_is_gerrit_change():
-            return self.task['build']['git'].get('ref_type') == 'gerrit_change'
-
         src_dir = os.path.join(self.task_dir, 'kernel_sources')
         os.makedirs(src_dir)
         lve_kernel_dir = os.path.join(self.task_dir, 'lve-kernel')
@@ -105,9 +101,6 @@ class KernelBuilder(BaseRPMBuilder):
         spec = self.locate_spec_file(lve_kernel_dir, self.task)
         clbuildid = self.get_value_from_spec(spec, 'clbuildid')
         lve_ver = self.get_value_from_spec(spec, 'lvever')
-        if ref_is_gerrit_change():
-            self.add_gerrit_ref_to_spec(spec,
-                                        self.task['build']['git'].get('ref'))
         full_lve_ver = '{0}-{1}'.format(lve_ver, clbuildid)
         self.logger.info('Creating lve-kmod tarball')
         tarball_dir_name = 'lve-kmod-{0}'.format(lve_ver)
@@ -123,18 +116,17 @@ class KernelBuilder(BaseRPMBuilder):
         self.logger.info('lve-kmod tarbal was created')
         # Need to do it for successfull sources check
         shutil.copy(tarball_file, add_src_dir)
-        if not ref_is_gerrit_change():
-            try:
-                git_tag = '{0}-el{1}'.format(full_lve_ver, self.dist_ver)
-                git_create_tag(lve_kmod_dir, git_tag, force=True)
-                git_push(lve_kmod_dir, self.__kmod_lve_uri, tags=True)
-            except Exception as e:
-                self.logger.error(
-                    'can not update remote repository {0}: {1}\n'
-                    ' Traceback:\n{2}'.format(self.__kmod_lve_uri,
-                                              str(e),
-                                              traceback.format_exc()))
-                raise BuildError(str(e))
+        try:
+            git_tag = '{0}-el{1}'.format(full_lve_ver, self.dist_ver)
+            git_create_tag(lve_kmod_dir, git_tag, force=True)
+            git_push(lve_kmod_dir, self.__kmod_lve_uri, tags=True)
+        except Exception as e:
+            self.logger.error(
+                'can not update remote repository {0}: {1}\n'
+                ' Traceback:\n{2}'.format(self.__kmod_lve_uri,
+                                          str(e),
+                                          traceback.format_exc()))
+            raise BuildError(str(e))
         self.prepare_koji_sources(kernel_repo, lve_kernel_dir, src_dir,
                                   src_suffix_dir=self.__add_kernel_srcs)
         self.logger.info('Kernel sources are prepared')
