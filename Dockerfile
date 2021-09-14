@@ -1,4 +1,4 @@
-FROM almalinux:8
+FROM centos:8
 
 COPY ./buildnode.repo /etc/yum.repos.d/buildnode.repo
 RUN dnf install -y epel-release && \
@@ -8,7 +8,7 @@ RUN dnf install -y epel-release && \
         python3-pycurl libicu libicu-devel python3-lxml git tree mlocate mc createrepo_c \
         python3-createrepo_c xmlsec1-openssl-devel cpio\
         kernel-rpm-macros python3-libmodulemd dpkg-dev mock debootstrap pbuilder apt apt-libs \
-        python3-apt keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring qemu-user-static && \
+        python3-apt keyrings-filesystem ubu-keyring debian-keyring && \
     dnf clean all
 
 RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
