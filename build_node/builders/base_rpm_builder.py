@@ -276,7 +276,7 @@ class BaseRPMBuilder(BaseBuilder):
                 download_file(source.name, output_dir)
             if source.position == 0 and isinstance(source, SpecSource):
                 tarball_path = os.path.join(output_dir, file_name)
-        if not os.path.exists(tarball_path):
+        if tarball_path is not None and not os.path.exists(tarball_path):
             tarball_prefix = '{0}-{1}/'.format(
                 parsed_spec.source_package.name,
                 parsed_spec.source_package.version)
