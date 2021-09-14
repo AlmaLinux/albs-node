@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   build_node:
-    image: avoid/albs-node
+    image: albs-node:latest
     privileged: true
     build:
       dockerfile: Dockerfile
@@ -9,6 +9,4 @@ services:
     command: "bash -c 'source env/bin/activate && ./almalinux_build_node.py -v'"
     restart: on-failure
     volumes:
-      - "./slave-config:/root/.config"
-    extra_hosts:
-     - "beta-build.cloudlinux.com:192.168.246.79"
+      - "./volumes/node_config:/root/.config"
