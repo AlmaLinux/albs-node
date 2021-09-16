@@ -14,6 +14,7 @@ import textwrap
 import traceback
 import time
 import urllib.parse
+from distutils.dir_util import copy_tree
 
 import validators
 import rpm
@@ -96,6 +97,12 @@ class BaseRPMBuilder(BaseBuilder):
                 source_srpm_dir = os.path.join(
                     self.task_dir, 'source_srpm')
                 os.makedirs(source_srpm_dir)
+                if self.task.is_alma_source():
+                    if src_suffix_dir == 'SOURCES':
+                        copy_tree(
+                            os.path.join(git_sources_dir, 'SOURCES'),
+                            source_srpm_dir
+                        )
                 spec_file = self.prepare_koji_sources(
                     git_repo,
                     git_sources_dir,
