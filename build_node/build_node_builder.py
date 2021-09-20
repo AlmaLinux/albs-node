@@ -174,26 +174,13 @@ class BuildNodeBuilder(threading.Thread):
         )
         return artifacts
 
-    def __upload_artifact(self, task, file_path, chunk_size=4194304):
-        """
-        Sends file through a ZeroMQ socket.
-
-        Parameters
-        ----------
-        task : dict
-            Build task.
-        file_path : str
-            Artifact file path.
-        chunk_size : int
-            Chunk size in bytes, 4MB seems to be a reasonable default since
-            only 9% of RPMs (including debuginfo) has greater size.
-        """
-        self.__logger.info('uploading {0} build artifact'.
-                           format(os.path.split(file_path)[1]))
-        return
-
     def __request_task(self):
-        task = self.__call_master('get_task')
+        supported_arches = [self.__config.base_arch]
+        if self.__config.base_arch == 'x86_64':
+            supported_arches.append('i686')
+        task = self.__call_master(
+            'get_task', supported_arches=supported_arches
+        )
         if not task:
             return
         return Task(**task)

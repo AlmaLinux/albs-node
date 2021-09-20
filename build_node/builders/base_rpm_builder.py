@@ -14,9 +14,11 @@ import textwrap
 import traceback
 import time
 import urllib.parse
+from distutils.dir_util import copy_tree
 
 import validators
 import rpm
+from pyrpm.spec import Spec, replace_macros
 
 from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
@@ -33,7 +35,6 @@ from build_node.utils.rpm_utils import unpack_src_rpm
 from build_node.utils.file_utils import download_file
 from build_node.utils.git_sources_utils import AlmaSourceDownloader
 from build_node.utils.index_utils import extract_metadata
-from build_node.utils.spec_parser import SpecParser, SpecSource
 from build_node.ported import to_unicode
 
 __all__ = ['BaseRPMBuilder']
@@ -96,6 +97,12 @@ class BaseRPMBuilder(BaseBuilder):
                 source_srpm_dir = os.path.join(
                     self.task_dir, 'source_srpm')
                 os.makedirs(source_srpm_dir)
+                if self.task.is_alma_source():
+                    if src_suffix_dir == 'SOURCES':
+                        copy_tree(
+                            os.path.join(git_sources_dir, 'SOURCES'),
+                            source_srpm_dir
+                        )
                 spec_file = self.prepare_koji_sources(
                     git_repo,
                     git_sources_dir,
@@ -253,15 +260,15 @@ class BaseRPMBuilder(BaseBuilder):
             Spec file path in the koji compatible sources directory.
         """
         spec_path = self.locate_spec_file(git_sources_dir)
-        parsed_spec = SpecParser(
-            spec_path, self.task.platform.data.get('definitions')
-        )
+        parsed_spec = Spec.from_file(spec_path)
         tarball_path = None
-        for source in itertools.chain(parsed_spec.source_package.sources,
-                                      parsed_spec.source_package.patches):
-            parsed_url = urllib.parse.urlparse(source.name)
+        for index, source in enumerate(
+                    itertools.chain(parsed_spec.sources, parsed_spec.patches)
+                ):
+            source = replace_macros(source, parsed_spec)
+            parsed_url = urllib.parse.urlparse(source)
             if parsed_url.scheme == '':
-                file_name = os.path.split(source.name)[1]
+                file_name = os.path.split(source)[1]
             else:
                 # TODO: verify that it works with all valid remote URLs
                 file_name = os.path.basename(parsed_url.path)
@@ -273,13 +280,14 @@ class BaseRPMBuilder(BaseBuilder):
             if os.path.exists(source_path):
                 shutil.copy(source_path, output_dir)
             elif parsed_url.scheme in ('http', 'https', 'ftp'):
-                download_file(source.name, output_dir)
-            if source.position == 0 and isinstance(source, SpecSource):
+                download_file(source, output_dir)
+            if index == 0:
                 tarball_path = os.path.join(output_dir, file_name)
-        if not os.path.exists(tarball_path):
+        if tarball_path is not None and not os.path.exists(tarball_path):
             tarball_prefix = '{0}-{1}/'.format(
-                parsed_spec.source_package.name,
-                parsed_spec.source_package.version)
+                replace_macros(parsed_spec.name, parsed_spec),
+                replace_macros(parsed_spec.version, parsed_spec)
+            )
             git_ref = self.task.ref.git_ref
             git_repo.archive(git_ref, tarball_path, archive_format='tar.bz2',
                              prefix=tarball_prefix)
@@ -303,15 +311,16 @@ class BaseRPMBuilder(BaseBuilder):
         mock_defines : dict or None
             Mock definitions.
         """
-        parser = SpecParser(spec_file, mock_defines)
-        for source in parser.source_package.sources:
-            parsed_url = urllib.parse.urlparse(source.name)
+        parser = Spec.from_file(spec_file)
+        for source in parser.sources:
+            replace_macros(source, parser)
+            parsed_url = urllib.parse.urlparse(source)
             if parsed_url.scheme == '':
                 continue
             file_name = os.path.basename(parsed_url.path)
             if os.path.exists(os.path.join(sources_dir, file_name)):
                 continue
-            download_file(source.name, sources_dir)
+            download_file(source, sources_dir)
 
     @staticmethod
     def generate_mock_config(config, task, srpm_build=False):

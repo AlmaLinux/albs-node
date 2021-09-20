@@ -19,10 +19,7 @@ from build_node.mock.mock_config import (
 )
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.utils.file_utils import safe_mkdir, chown_recursive
-from build_node.utils.git_utils import (
-    MirroredGitRepo, WrappedGitRepo, git_checkout, git_init_repo,
-    git_get_commit_id
-)
+from build_node.utils.git_utils import MirroredGitRepo, git_get_commit_id
 from .. import build_node_globals as node_globals
 
 __all__ = ['measure_stage', 'BaseBuilder']
@@ -87,10 +84,7 @@ class BaseBuilder(object):
         # created git tag name
         self.created_tag = None
         self._build_stats = {}
-        if self.config.arm64_support:
-            self._pre_build_hook_target_arch = 'aarch64'
-        else:
-            self._pre_build_hook_target_arch = 'x86_64'
+        self._pre_build_hook_target_arch = self.config.base_arch
 
     def checkout_git_sources(self, git_sources_dir, ref):
         """
@@ -250,15 +244,15 @@ class BaseBuilder(object):
 
         # FIXME: Make repository configs in smarter way to avoid errors with
         #  package installation
-        if self._pre_build_hook_target_arch == 'aarch64':
+        if self._pre_build_hook_target_arch != 'x86_64':
             yum_repos = [
                 YumRepositoryConfig(repositoryid='centos7-os', name='centos7-os',
                                     baseurl='http://mirror.centos.org/'
-                                            'altarch/7/os/aarch64/'),
+                                            'altarch/7/os/$basearch/'),
                 YumRepositoryConfig(repositoryid='centos7-updates',
                                     name='centos7-updates',
                                     baseurl='http://mirror.centos.org/altarch/7'
-                                            '/updates/aarch64/')
+                                            '/updates/$basearch/')
             ]
         else:
             yum_repos = [

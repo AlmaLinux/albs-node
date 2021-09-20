@@ -10,6 +10,7 @@ import os
 
 from build_node.utils.config import BaseConfig
 
+DEFAULT_BASE_ARCH = 'x86_64'
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
@@ -104,6 +105,7 @@ class BuildNodeConfig(BaseConfig):
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
+            'base_arch': DEFAULT_BASE_ARCH
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -128,7 +130,8 @@ class BuildNodeConfig(BaseConfig):
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
-            'jwt_token': {'type': 'string', 'nullable': True}
+            'jwt_token': {'type': 'string', 'nullable': True},
+            'base_arch': {'type': 'string', 'nullable': False}
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)
