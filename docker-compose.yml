@@ -2,6 +2,7 @@ version: "3.9"
 services:
   build_node:
     image: albs-node:latest
+    hostname: "${ALBS_HOSTNAME}"
     privileged: true
     build:
       dockerfile: Dockerfile

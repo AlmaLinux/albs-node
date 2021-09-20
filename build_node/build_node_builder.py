@@ -178,9 +178,16 @@ class BuildNodeBuilder(threading.Thread):
         supported_arches = [self.__config.base_arch]
         if self.__config.base_arch == 'x86_64':
             supported_arches.append('i686')
-        task = self.__call_master(
-            'get_task', supported_arches=supported_arches
-        )
+        task = None
+        try:
+            task = self.__call_master(
+                'get_task', supported_arches=supported_arches
+            )
+        except Exception:
+            self.__logger.error(
+                f"Can't request new task from master:\n"
+                f"{traceback.format_exc()}"
+            )
         if not task:
             return
         return Task(**task)
@@ -200,8 +207,8 @@ class BuildNodeBuilder(threading.Thread):
         self.__call_master('build_done', **kwargs)
 
     def __call_master(self, endpoint, **parameters):
-        # TODO: move to config
-        full_url = urllib.parse.urljoin(self.__config.master_url, f'build_node/{endpoint}')
+        full_url = urllib.parse.urljoin(
+            self.__config.master_url, f'build_node/{endpoint}')
         headers = {'authorization': f'Bearer {self.__config.jwt_token}'}
         if endpoint == 'build_done':
             response = requests.post(
