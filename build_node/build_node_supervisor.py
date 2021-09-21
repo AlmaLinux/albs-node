@@ -1,3 +1,4 @@
+import traceback
 import threading
 import logging
 import urllib
@@ -40,5 +41,11 @@ class BuilderSupervisor(threading.Thread):
             )
             data = {'active_tasks': [int(item) for item in active_tasks]}
             headers = {'authorization': f'Bearer {self.config.jwt_token}'}
-            requests.post(full_url, json=data, headers=headers)
+            try:
+                requests.post(full_url, json=data, headers=headers)
+            except Exception:
+                logging.error(
+                    f"Can't report active task to master:\n"
+                    f"{traceback.format_exc()}"
+                )
             self.terminated_event.wait(60)
