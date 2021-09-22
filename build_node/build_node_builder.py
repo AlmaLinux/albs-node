@@ -118,7 +118,7 @@ class BuildNodeBuilder(threading.Thread):
                             task, artifacts_dir, task_log_file)
                         if excluded_exception is not None:
                             self.__report_excluded_task(
-                                task, str(excluded_exception))
+                                task, build_artifacts)
                     except Exception as e:
                         self.__logger.error(
                             'Cannot upload task artifacts: {0}. '
@@ -192,16 +192,20 @@ class BuildNodeBuilder(threading.Thread):
             return
         return Task(**task)
 
-    def __report_excluded_task(self, task, reason):
-        kwargs = {'task_id': task.id, 'reason': reason}
-        self.__call_master('build_excluded', **kwargs)
+    def __report_excluded_task(self, task, artifacts):
+        kwargs = {
+            'task_id': task.id,
+            'status': 'excluded',
+            'artifacts': [artifact.dict() for artifact in artifacts]
+        }
+        self.__call_master('build_done', **kwargs)
 
     def __report_done_task(self, task, success=True, artifacts=None):
         if not artifacts:
             artifacts = []
         kwargs = {
             'task_id': task.id,
-            'success': success,
+            'status': 'done' if success else 'failed',
             'artifacts': [artifact.dict() for artifact in artifacts]
         }
         self.__call_master('build_done', **kwargs)
