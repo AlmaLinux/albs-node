@@ -24,6 +24,10 @@ class BaseSourceDownloader:
             yield checksum, os.path.join(self._sources_dir, path)
 
     def download_all(self):
+        if not self.find_metadata_file():
+            return
+        # TODO: instead of hardcoded name, we should create any path,
+        #       needed by metadata file, not just "SOURCES"
         if not os.path.exists(os.path.join(self._sources_dir, 'SOURCES')):
             os.mkdir(os.path.join(self._sources_dir, 'SOURCES'))
         for checksum, path in self.iter_source_records():
