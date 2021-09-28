@@ -265,9 +265,17 @@ class BaseRPMBuilder(BaseBuilder):
             Spec file path in the koji compatible sources directory.
         """
         spec_path = self.locate_spec_file(git_sources_dir)
-        parsed_spec = SpecParser(
-            spec_path, self.task.platform.data.get('definitions')
-        )
+        try:
+            parsed_spec = SpecParser(
+                spec_path, self.task.platform.data.get('definitions')
+            )
+        except ValueError:
+            self.logger.debug("Can't parse spec file, expecting all sources"
+                              " to be in the right place already")
+            spec_file_name = os.path.basename(spec_path)
+            new_spec_path = os.path.join(output_dir, spec_file_name)
+            shutil.copy(spec_path, new_spec_path)
+            return new_spec_path
         tarball_path = None
         for source in itertools.chain(parsed_spec.source_package.sources,
                                       parsed_spec.source_package.patches):
