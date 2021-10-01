@@ -80,9 +80,10 @@ class BuildNodeBuilder(threading.Thread):
                 continue
             self.__current_task_id = task.id
             self.__start_ts = datetime.datetime.utcnow()
+            ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(task_dir, 'albs.log')
+            task_log_file = os.path.join(task_dir, f'albs.{ts}.log')
             task_log_handler = None
             success = False
             excluded = False
