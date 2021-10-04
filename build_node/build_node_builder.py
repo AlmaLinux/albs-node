@@ -54,6 +54,7 @@ class BuildNodeBuilder(threading.Thread):
         self.init_working_dir(self.__working_dir)
         self.__logger = None
         self.__current_task_id = None
+        self.__task_completed = False
         # current task processing start timestamp
         self.__start_ts = None
         self.__sentry = Sentry(config.sentry_dsn)
@@ -117,8 +118,9 @@ class BuildNodeBuilder(threading.Thread):
                         build_artifacts = self.__upload_artifacts(
                             task, artifacts_dir, task_log_file)
                         if excluded_exception is not None:
-                            self.__report_excluded_task(
-                                task, build_artifacts)
+                            while not self.__task_completed:
+                                self.__report_excluded_task(
+                                    task, build_artifacts)
                     except Exception as e:
                         self.__logger.error(
                             'Cannot upload task artifacts: {0}. '
@@ -126,8 +128,9 @@ class BuildNodeBuilder(threading.Thread):
                                 str(e), traceback.format_exc()))
                         self.__sentry.capture_exception(e)
                 if not excluded:
-                    self.__report_done_task(
-                        task, success=success, artifacts=build_artifacts)
+                    while not self.__task_completed:
+                        self.__report_done_task(
+                            task, success=success, artifacts=build_artifacts)
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
@@ -198,7 +201,15 @@ class BuildNodeBuilder(threading.Thread):
             'status': 'excluded',
             'artifacts': [artifact.dict() for artifact in artifacts]
         }
-        self.__call_master('build_done', **kwargs)
+        try:
+            self.__call_master('build_done', **kwargs)
+        except Exception:
+            self.__logger.error(
+                f"Can't mark the task as excluded:\n"
+                f"{traceback.format_exc()}"
+            )
+            return
+        self.__task_completed = True
 
     def __report_done_task(self, task, success=True, artifacts=None):
         if not artifacts:
@@ -208,7 +219,15 @@ class BuildNodeBuilder(threading.Thread):
             'status': 'done' if success else 'failed',
             'artifacts': [artifact.dict() for artifact in artifacts]
         }
-        self.__call_master('build_done', **kwargs)
+        try:
+            self.__call_master('build_done', **kwargs)
+        except Exception:
+            self.__logger.error(
+                f"Can't mark the task as done:\n"
+                f"{traceback.format_exc()}"
+            )
+            return
+        self.__task_completed = True
 
     def __call_master(self, endpoint, **parameters):
         full_url = urllib.parse.urljoin(
