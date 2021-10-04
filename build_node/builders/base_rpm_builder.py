@@ -358,12 +358,16 @@ class BaseRPMBuilder(BaseBuilder):
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
         mock_config_kwargs = {'use_bootstrap_container': False}
+        target_arch = task.arch
         for key, value in task.platform.data['mock'].items():
-            mock_config_kwargs[key] = value
+            if key == 'target_arch':
+                target_arch = value
+            else:
+                mock_config_kwargs[key] = value
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'), use_nspawn=False,
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=task.arch, **mock_config_kwargs
+            yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
         )
         if config.pesign_support:
             bind_plugin = MockBindMountPluginConfig(
