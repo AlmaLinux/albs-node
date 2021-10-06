@@ -118,7 +118,7 @@ class BuildNodeBuilder(threading.Thread):
                             task, artifacts_dir, task_log_file)
                         if excluded_exception is not None:
                             self.__report_excluded_task(
-                                task, str(excluded_exception))
+                                task, build_artifacts)
                     except Exception as e:
                         self.__logger.error(
                             'Cannot upload task artifacts: {0}. '
@@ -178,30 +178,41 @@ class BuildNodeBuilder(threading.Thread):
         supported_arches = [self.__config.base_arch]
         if self.__config.base_arch == 'x86_64':
             supported_arches.append('i686')
-        task = self.__call_master(
-            'get_task', supported_arches=supported_arches
-        )
+        task = None
+        try:
+            task = self.__call_master(
+                'get_task', supported_arches=supported_arches
+            )
+        except Exception:
+            self.__logger.error(
+                f"Can't request new task from master:\n"
+                f"{traceback.format_exc()}"
+            )
         if not task:
             return
         return Task(**task)
 
-    def __report_excluded_task(self, task, reason):
-        kwargs = {'task_id': task.id, 'reason': reason}
-        self.__call_master('build_excluded', **kwargs)
+    def __report_excluded_task(self, task, artifacts):
+        kwargs = {
+            'task_id': task.id,
+            'status': 'excluded',
+            'artifacts': [artifact.dict() for artifact in artifacts]
+        }
+        self.__call_master('build_done', **kwargs)
 
     def __report_done_task(self, task, success=True, artifacts=None):
         if not artifacts:
             artifacts = []
         kwargs = {
             'task_id': task.id,
-            'success': success,
+            'status': 'done' if success else 'failed',
             'artifacts': [artifact.dict() for artifact in artifacts]
         }
         self.__call_master('build_done', **kwargs)
 
     def __call_master(self, endpoint, **parameters):
-        # TODO: move to config
-        full_url = urllib.parse.urljoin(self.__config.master_url, f'build_node/{endpoint}')
+        full_url = urllib.parse.urljoin(
+            self.__config.master_url, f'build_node/{endpoint}')
         headers = {'authorization': f'Bearer {self.__config.jwt_token}'}
         if endpoint == 'build_done':
             response = requests.post(
