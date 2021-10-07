@@ -10,4 +10,4 @@ services:
     command: "bash -c 'source env/bin/activate && ./almalinux_build_node.py -v'"
     restart: on-failure
     volumes:
-      - "./volumes/node_config:/root/.config"
+      - "./volumes/node_config:/home/alt/.config"
