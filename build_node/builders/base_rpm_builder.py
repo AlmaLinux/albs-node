@@ -265,48 +265,55 @@ class BaseRPMBuilder(BaseBuilder):
             Spec file path in the koji compatible sources directory.
         """
         spec_path = self.locate_spec_file(git_sources_dir)
+        spec_file_name = os.path.basename(spec_path)
+        new_spec_path = os.path.join(output_dir, spec_file_name)
+        shutil.copy(spec_path, new_spec_path)
         try:
             parsed_spec = SpecParser(
                 spec_path, self.task.platform.data.get('definitions')
             )
         except ValueError:
-            self.logger.debug("Can't parse spec file, expecting all sources"
-                              " to be in the right place already")
-            spec_file_name = os.path.basename(spec_path)
-            new_spec_path = os.path.join(output_dir, spec_file_name)
-            shutil.copy(spec_path, new_spec_path)
+            self.logger.exception(
+                "Can't parse spec file, expecting all sources"
+                " to be in the right place already"
+            )
             return new_spec_path
         tarball_path = None
-        for source in itertools.chain(parsed_spec.source_package.sources,
-                                      parsed_spec.source_package.patches):
-            parsed_url = urllib.parse.urlparse(source.name)
-            if parsed_url.scheme == '':
-                file_name = os.path.split(source.name)[1]
-            else:
-                # TODO: verify that it works with all valid remote URLs
-                file_name = os.path.basename(parsed_url.path)
-            if not src_suffix_dir:
-                source_path = os.path.join(git_sources_dir, file_name)
-            else:
-                source_path = os.path.join(git_sources_dir, src_suffix_dir,
-                                           file_name)
-            if os.path.exists(source_path):
-                shutil.copy(source_path, output_dir)
-            elif parsed_url.scheme in ('http', 'https', 'ftp'):
-                download_file(source.name, output_dir)
-            if source.position == 0 and isinstance(source, SpecSource):
-                tarball_path = os.path.join(output_dir, file_name)
-        if tarball_path is not None and not os.path.exists(tarball_path):
-            tarball_prefix = '{0}-{1}/'.format(
-                parsed_spec.source_package.name,
-                parsed_spec.source_package.version
+        try:
+            for source in itertools.chain(parsed_spec.source_package.sources,
+                                          parsed_spec.source_package.patches):
+                parsed_url = urllib.parse.urlparse(source.name)
+                if parsed_url.scheme == '':
+                    file_name = os.path.split(source.name)[1]
+                else:
+                    # TODO: verify that it works with all valid remote URLs
+                    file_name = os.path.basename(parsed_url.path)
+                if not src_suffix_dir:
+                    source_path = os.path.join(git_sources_dir, file_name)
+                else:
+                    source_path = os.path.join(git_sources_dir, src_suffix_dir,
+                                               file_name)
+                if os.path.exists(source_path):
+                    shutil.copy(source_path, output_dir)
+                elif parsed_url.scheme in ('http', 'https', 'ftp'):
+                    download_file(source.name, output_dir)
+                if source.position == 0 and isinstance(source, SpecSource):
+                    tarball_path = os.path.join(output_dir, file_name)
+            if tarball_path is not None and not os.path.exists(tarball_path):
+                tarball_prefix = '{0}-{1}/'.format(
+                    parsed_spec.source_package.name,
+                    parsed_spec.source_package.version
+                )
+                git_ref = self.task.ref.git_ref
+                git_repo.archive(
+                    git_ref, tarball_path, archive_format='tar.bz2',
+                    prefix=tarball_prefix
+                )
+        except Exception:
+            self.logger.exception(
+                'Can\'t load sources from remote repo, '
+                'expecting them to be in the right place already'
             )
-            git_ref = self.task.ref.git_ref
-            git_repo.archive(git_ref, tarball_path, archive_format='tar.bz2',
-                             prefix=tarball_prefix)
-        spec_file_name = os.path.basename(spec_path)
-        new_spec_path = os.path.join(output_dir, spec_file_name)
-        shutil.copy(spec_path, new_spec_path)
         return new_spec_path
 
     @staticmethod
@@ -366,12 +373,16 @@ class BaseRPMBuilder(BaseBuilder):
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
         mock_config_kwargs = {'use_bootstrap_container': False}
+        target_arch = task.arch
         for key, value in task.platform.data['mock'].items():
-            mock_config_kwargs[key] = value
+            if key == 'target_arch':
+                target_arch = value
+            else:
+                mock_config_kwargs[key] = value
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'), use_nspawn=False,
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=task.arch, **mock_config_kwargs
+            yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
         )
         if config.pesign_support:
             bind_plugin = MockBindMountPluginConfig(

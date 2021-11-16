@@ -6,7 +6,7 @@ RUN dnf install -y epel-release && \
     dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="buildnode" \
         python3 gcc gcc-c++ python3-devel python3-virtualenv cmake \
         python3-pycurl libicu libicu-devel python3-lxml git tree mlocate mc createrepo_c \
-        python3-createrepo_c xmlsec1-openssl-devel cpio\
+        python3-createrepo_c xmlsec1-openssl-devel cpio sudo \
         kernel-rpm-macros python3-libmodulemd dpkg-dev mock debootstrap pbuilder apt apt-libs \
         python3-apt keyrings-filesystem ubu-keyring debian-keyring && \
     dnf clean all
@@ -39,6 +39,15 @@ RUN /build-node/env/bin/pip install --upgrade pip==21.1 && /build-node/env/bin/p
 
 COPY ./build_node /build-node/build_node
 COPY almalinux_build_node.py /build-node/almalinux_build_node.py
+
+# A lot of rpm packages contains unit-tests which should be run as non-root user
+RUN useradd -ms /bin/bash alt
+RUN usermod -aG wheel alt
+RUN usermod -aG mock alt
+RUN echo 'alt ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN echo 'wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN chown -R alt:alt /build-node /wait_for_it.sh /srv
+USER alt
 
 # FIXME:
 # COPY ./tests /build-node/tests
