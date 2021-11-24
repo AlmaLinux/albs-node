@@ -17,6 +17,7 @@ import typing
 
 import yaml
 import requests
+from requests import codes
 from requests.packages.urllib3.util.retry import Retry
 
 from build_node import constants
@@ -256,7 +257,7 @@ class BuildNodeBuilder(threading.Thread):
         try:
             response = session_method(full_url, json=parameters)
             # Special case when build was already done
-            if response.status_code == 409:
+            if response.status_code == requests.codes.conflict:
                 return {}
             response.raise_for_status()
             return response.json()
