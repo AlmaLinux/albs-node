@@ -17,7 +17,6 @@ import typing
 
 import yaml
 import requests
-from requests import codes
 from requests.packages.urllib3.util.retry import Retry
 
 from build_node import constants
