@@ -255,6 +255,9 @@ class BuildNodeBuilder(threading.Thread):
             session_method = self.__session.get
         try:
             response = session_method(full_url, json=parameters)
+            # Special case when build was already done
+            if response.status_code == requests.codes.conflict:
+                return {}
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RetryError:
