@@ -1,5 +1,6 @@
 import logging
 import os
+import csv
 import tempfile
 import time
 import shutil
@@ -144,19 +145,15 @@ class PulpBaseUploader(BaseUploader):
             total_size = os.path.getsize(file_path)
             self._file_splitter.split(
                 file_path, self._chunk_size, output_dir=temp_dir)
-            for file_ in sorted(os.listdir(temp_dir)):
-                if file_ == 'fs_manifest.csv':
-                    continue
-                split_file_path = os.path.join(temp_dir, file_)
-                # File part may have size lower than self._chunk_size,
-                # so to avoid this issue calculate file size before upload
-                new_size = os.path.getsize(split_file_path)
-                upper_bytes_limit = lower_bytes_limit + new_size - 1
+            manifest_path = os.path.join(temp_dir, 'fs_manifest.csv')
+            for meta in csv.DictReader(open(manifest_path, 'r')):
+                split_file_path = os.path.join(temp_dir, meta['filename'])
+                upper_bytes_limit = lower_bytes_limit + int(meta['filesize']) - 1
                 self._uploads_client.update(
                     f'bytes {lower_bytes_limit}-{upper_bytes_limit}/'
                     f'{total_size}',
                     reference, split_file_path)
-                lower_bytes_limit += new_size
+                lower_bytes_limit += int(meta['filesize'])
         finally:
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
