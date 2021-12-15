@@ -9,7 +9,7 @@ CloudLinux Build System build thread implementation.
 import datetime
 import logging
 import os
-import urllib
+import urllib.parse
 import platform
 import random
 import threading
@@ -17,6 +17,7 @@ import typing
 
 import yaml
 import requests
+import requests.adapters
 from requests.packages.urllib3.util.retry import Retry
 
 from build_node import constants
@@ -99,7 +100,7 @@ class BuildNodeBuilder(threading.Thread):
                 task_log_handler = self.__init_task_logger(task_log_file)
                 self.__build_packages(task, task_dir, artifacts_dir)
                 build_artifacts = self.__upload_artifacts(
-                    task, artifacts_dir, task_log_file)
+                    artifacts_dir, task_log_file)
                 success = True
             except BuildError as e:
                 self.__logger.exception(
@@ -126,7 +127,7 @@ class BuildNodeBuilder(threading.Thread):
                 if not success:
                     try:
                         build_artifacts = self.__upload_artifacts(
-                            task, artifacts_dir, task_log_file)
+                            artifacts_dir, task_log_file, only_logs=True)
                     except Exception as e:
                         self.__logger.exception(
                             'Cannot upload task artifacts: %s.', e)
@@ -158,7 +159,7 @@ class BuildNodeBuilder(threading.Thread):
 
         Parameters
         ----------
-        task : dict
+        task : Task
             Build task information.
         task_dir : str
             Build task working directory path.
@@ -171,8 +172,10 @@ class BuildNodeBuilder(threading.Thread):
                                        task_dir, artifacts_dir)
         self.__builder.build()
 
-    def __upload_artifacts(self, task, artifacts_dir, task_log_file):
-        artifacts = self._pulp_uploader.upload(artifacts_dir)
+    def __upload_artifacts(self, artifacts_dir, task_log_file,
+                           only_logs: bool = False):
+        artifacts = self._pulp_uploader.upload(
+            artifacts_dir, only_logs=only_logs)
         build_stats = self.__builder.get_build_stats()
         build_stats_path = os.path.join(artifacts_dir, 'build_stats.yml')
         with open(build_stats_path, 'w') as fd:

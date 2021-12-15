@@ -176,7 +176,7 @@ class PulpBaseUploader(BaseUploader):
         if response.results:
             return response.results[0].pulp_href
 
-    def upload(self, artifacts_dir: str) -> List[str]:
+    def upload(self, artifacts_dir: str) -> List[Artifact]:
         """
 
         Parameters
@@ -210,13 +210,13 @@ class PulpBaseUploader(BaseUploader):
 
         Parameters
         ----------
-        artifacts_dir : str
-            Path to files that need to be uploaded.
+        filename : str
+            Path to file that needs to be uploaded.
 
         Returns
         -------
-        list
-            List of the references to the artifacts inside Pulp
+        Artifact
+            Object describing a single upload
 
         """
         file_sha256 = hash_file(filename, hash_type='sha256')
@@ -232,7 +232,8 @@ class PulpBaseUploader(BaseUploader):
 
 class PulpRpmUploader(PulpBaseUploader):
 
-    def get_artifacts_list(self, artifacts_dir: str) -> List[str]:
+    def get_artifacts_list(self, artifacts_dir: str,
+                           only_logs: bool = False) -> List[str]:
         """
 
         Returns the list of the files in artifacts directory
@@ -242,6 +243,8 @@ class PulpRpmUploader(PulpBaseUploader):
         ----------
         artifacts_dir : str
             Path to artifacts directory.
+        only_logs : bool
+            Flag if only logs needs to be uploaded
 
         Returns
         -------
@@ -251,10 +254,43 @@ class PulpRpmUploader(PulpBaseUploader):
         """
         artifacts = []
         for file_ in super().get_artifacts_list(artifacts_dir):
-            if file_.endswith('.rpm'):
+            if file_.endswith('.rpm') and not only_logs:
                 artifacts.append(file_)
             elif file_.endswith('.log'):
                 artifacts.append(file_)
             elif file_.endswith('.cfg'):
                 artifacts.append(file_)
+        return artifacts
+
+    def upload(self, artifacts_dir: str,
+               only_logs: bool = False) -> List[Artifact]:
+        """
+
+        Parameters
+        ----------
+        artifacts_dir : str
+            Path to files that need to be uploaded.
+        only_logs : bool
+            Flag if only logs needs to be uploaded
+
+        Returns
+        -------
+        list
+            List of the references to the artifacts inside Pulp
+
+        """
+        artifacts = []
+        errored_uploads = []
+        for artifact in self.get_artifacts_list(
+                artifacts_dir, only_logs=only_logs):
+            try:
+                artifacts.append(self.upload_single_file(artifact))
+            except Exception as e:
+                self._logger.error(f'Cannot upload {artifact}, error: {e}',
+                                   exc_info=e)
+                errored_uploads.append(artifact)
+        # TODO: Decide what to do with successfully uploaded artifacts
+        #  in case of errors during upload.
+        if errored_uploads:
+            raise UploadError(f'Unable to upload files: {errored_uploads}')
         return artifacts
