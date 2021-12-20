@@ -18,7 +18,7 @@ def get_suitable_builder(task):
 
     Parameters
     ----------
-    task : dict
+    task : Task
         Build task.
 
     Returns

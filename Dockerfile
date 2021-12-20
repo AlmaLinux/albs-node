@@ -12,6 +12,12 @@ RUN dnf install -y epel-release && \
     dnf clean all
 
 RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
+# A lot of rpm packages contains unit-tests which should be run as non-root user
+RUN useradd -ms /bin/bash alt
+RUN usermod -aG wheel alt
+RUN usermod -aG mock alt
+RUN echo 'alt ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN echo 'wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 RUN mkdir -p \
     /srv/alternatives/castor/build_node \
@@ -40,12 +46,6 @@ RUN /build-node/env/bin/pip install --upgrade pip==21.1 && /build-node/env/bin/p
 COPY ./build_node /build-node/build_node
 COPY almalinux_build_node.py /build-node/almalinux_build_node.py
 
-# A lot of rpm packages contains unit-tests which should be run as non-root user
-RUN useradd -ms /bin/bash alt
-RUN usermod -aG wheel alt
-RUN usermod -aG mock alt
-RUN echo 'alt ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-RUN echo 'wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 RUN chown -R alt:alt /build-node /wait_for_it.sh /srv
 USER alt
 
