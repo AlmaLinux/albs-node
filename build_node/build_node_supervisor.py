@@ -16,7 +16,7 @@ class BuilderSupervisor(threading.Thread):
         self.config = config
         self.builders = builders
         self.terminated_event = terminated_event
-        self.__generate_request_session()
+        self.__session = None
         super(BuilderSupervisor, self).__init__(name='BuildersSupervisor')
 
     def __generate_request_session(self):
@@ -40,7 +40,13 @@ class BuilderSupervisor(threading.Thread):
         return set([b.current_task_id for b in self.builders]) - set([None, ])
 
     def run(self):
-        while any([t.is_alive() for t in self.builders]):
+        self.__generate_request_session()
+        while not self.terminated_event.is_set():
+            builders_aliveness = [t.is_alive() for t in self.builders]
+            logging.debug('Builders aliveness: %s', str(builders_aliveness))
+            if not any(builders_aliveness):
+                logging.warning('All builders are dead, exiting')
+                break
             active_tasks = self.get_active_tasks()
             logging.debug('Sending active tasks: {}'.format(active_tasks))
             # support_arches = {
