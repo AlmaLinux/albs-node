@@ -230,7 +230,7 @@ class BaseRPMBuilder(BaseBuilder):
         if self.task.ref.url.endswith('src.rpm'):
             srpm_url = self.task.ref.url
         else:
-            srpm_url = self.task.builted_srpm_url
+            srpm_url = self.task.built_srpm_url
         self.logger.info(f'repacking previously built src-RPM {srpm_url}')
         src_dir = os.path.join(self.task_dir, 'srpm_sources')
         os.makedirs(src_dir)

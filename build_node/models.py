@@ -41,10 +41,10 @@ class Task(BaseModel):
     platform: TaskPlatform
     created_by: TaskCreatedBy
     repositories: typing.List[TaskRepo]
-    builted_srpm_url: typing.Optional[str]
+    built_srpm_url: typing.Optional[str]
 
     def is_srpm_build_required(self):
-        return not self.ref.url.endswith('src.rpm') and not self.builted_srpm_url
+        return not (self.ref.url.endswith('src.rpm') or self.built_srpm_url)
 
     def is_alma_source(self):
         return self.ref.url.startswith('https://git.almalinux.org/')
