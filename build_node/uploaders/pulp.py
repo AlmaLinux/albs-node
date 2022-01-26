@@ -26,13 +26,16 @@ class TaskFailedError(Exception):
     pass
 
 
+DEFAULT_TIMEOUT = 120  # 2 minutes per request
+
+
 class PulpBaseUploader(BaseUploader):
     """
     Handles uploads to Pulp server.
     """
 
     def __init__(self, host: str, username: str, password: str,
-                 chunk_size: int, requests_timeout: int = 120):
+                 chunk_size: int, requests_timeout: int = DEFAULT_TIMEOUT):
         """
         Initiate uploader.
 
