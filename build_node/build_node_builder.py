@@ -257,7 +257,10 @@ class BuildNodeBuilder(threading.Thread):
         else:
             session_method = self.__session.get
         try:
-            response = session_method(full_url, json=parameters)
+            response = session_method(
+                full_url, json=parameters,
+                timeout=self.__config.request_timeout
+            )
             # Special case when build was already done
             if response.status_code == requests.codes.conflict:
                 return {}
