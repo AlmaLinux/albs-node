@@ -49,30 +49,16 @@ class BuilderSupervisor(threading.Thread):
                 break
             active_tasks = self.get_active_tasks()
             logging.debug('Sending active tasks: {}'.format(active_tasks))
-            # support_arches = {
-            #     'native': self.config.native_support,
-            #     'arm64': self.config.arm64_support,
-            #     'arm32': self.config.arm32_support,
-            #     'pesign': self.config.pesign_support
-            # }
-            # request = {
-            #     'node_id': self.config.node_id,
-            #     'parameters': {
-            #         'active_tasks': list(active_tasks),
-            #         'node_type': self.config.node_type,
-            #         'threads_count': self.config.threads_count,
-            #         'supports': support_arches
-            #     }
-            # }
             full_url = urllib.parse.urljoin(
                 self.config.master_url, 'build_node/ping'
             )
             data = {'active_tasks': [int(item) for item in active_tasks]}
             try:
-                self.__session.post(full_url, json=data)
+                self.__session.post(
+                    full_url, json=data, timeout=self.config.request_timeout)
             except Exception:
                 logging.error(
-                    f"Can't report active task to master:\n"
-                    f"{traceback.format_exc()}"
+                    "Can't report active task to master:\n%s",
+                    traceback.format_exc()
                 )
             self.terminated_event.wait(60)

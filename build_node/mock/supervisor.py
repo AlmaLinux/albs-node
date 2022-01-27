@@ -164,7 +164,8 @@ class MockSupervisor(object):
                 self.__scrub_mock_environment(config_path.decode('utf-8'))
                 locks_cursor.pop(config_file)
                 txn.delete(config_file, db=stats_db)
-                os.remove(config_path)
+                if os.path.exists(config_path):
+                    os.remove(config_path)
                 continue
             elif current_ts - creation_ts > self.__refresh_time:
                 # an environment is outdated, regenerate its cache

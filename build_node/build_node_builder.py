@@ -125,6 +125,9 @@ class BuildNodeBuilder(threading.Thread):
                 self.__sentry.capture_exception(e)
             finally:
                 if not success:
+                    if excluded_exception is not None:
+                        self.__report_excluded_task(
+                            task, build_artifacts)
                     try:
                         build_artifacts = self.__upload_artifacts(
                             artifacts_dir, task_log_file, only_logs=True)
@@ -132,9 +135,6 @@ class BuildNodeBuilder(threading.Thread):
                         self.__logger.exception(
                             'Cannot upload task artifacts: %s.', e)
                         self.__sentry.capture_exception(e)
-                    if excluded_exception is not None:
-                        self.__report_excluded_task(
-                            task, build_artifacts)
                 if not excluded:
                     self.__report_done_task(
                         task, success=success, artifacts=build_artifacts)
