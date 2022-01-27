@@ -7,6 +7,7 @@ import shutil
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from typing import List
 
+import asyncio
 from fsplit.filesplit import Filesplit
 from pulpcore.client.pulpcore.configuration import Configuration
 from pulpcore.client.pulpcore.api_client import ApiClient
@@ -94,7 +95,7 @@ class PulpBaseUploader(BaseUploader):
         """
         result = self._tasks_client.read(task_href)
         while result.state not in ('failed', 'completed'):
-            time.sleep(20)
+            asyncio.sleep(20)
             result = self._tasks_client.read(
                 task_href, _request_timeout=self._requests_timeout)
         if result.state == 'failed':
