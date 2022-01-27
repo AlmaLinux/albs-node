@@ -42,6 +42,7 @@ class Task(BaseModel):
     created_by: TaskCreatedBy
     repositories: typing.List[TaskRepo]
     built_srpm_url: typing.Optional[str]
+    is_secure_boot: bool
 
     def is_srpm_build_required(self):
         return not (self.ref.url.endswith('src.rpm') or self.built_srpm_url)

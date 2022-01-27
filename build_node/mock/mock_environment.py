@@ -126,13 +126,18 @@ class MockEnvironment(object):
         if isinstance(root, bytes):
             root = root.decode('utf-8')
         self.__config_path = config_path
-        self.__configdir = os.path.split(config_path)[0]
+        self.__configdir = os.path.dirname(config_path)
         self.__root = root
 
     def __enter__(self):
         return self
 
     def clean(self):
+        try:
+            self.__execute_mock(clean='')
+        except MockError as e:
+            self.__log.error('Cannot run config %s clean. Stdout:\n%s\n'
+                             'Stderr:\n%s', self.__root, e.stdout, e.stderr)
         self.__execute_mock(clean='')
 
     def buildsrpm(self, spec, sources, resultdir=None, definitions=None,
@@ -304,7 +309,11 @@ class MockEnvironment(object):
             One of "all", "chroot", "cache", "root-cache", "c-cache" or
             "yum-cache". See `man mock` for details.
         """
-        self.__execute_mock(scrub=scrub_type)
+        try:
+            self.__execute_mock(scrub=scrub_type)
+        except MockError as e:
+            self.__log.error('Cannot run config %s scrub. Stdout:\n%s\n'
+                             'Stderr:\n%s', self.__root, e.stdout, e.stderr)
 
     def __execute_mock(self, **kwargs):
         """
@@ -412,5 +421,7 @@ class MockEnvironment(object):
 
     @property
     def config(self):
+        if not os.path.exists(self.__config_path):
+            return ''
         with open(self.__config_path, 'r') as conf:
             return conf.read()
