@@ -199,6 +199,8 @@ class BuildNodeBuilder(threading.Thread):
         )
         if not task:
             return
+        if not task.get('is_secure_boot'):
+            task['is_secure_boot'] = False
         return Task(**task)
 
     def __report_excluded_task(self, task, artifacts):
