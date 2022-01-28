@@ -284,6 +284,8 @@ class MockConfig(object):
             return 'aarch64', 'armhf', 'armhfp'
         elif target_arch in ('ppc64le', ):
             return 'ppc64le'
+        elif target_arch in ('s390x', ):
+            return 's390x'
         raise ValueError('there is no default_host_arches value for {0} '
                          'architecture'.format(target_arch))
 
