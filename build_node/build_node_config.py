@@ -24,6 +24,8 @@ DEFAULT_PULP_HOST = 'http://pulp'
 DEFAULT_PULP_USER = 'pulp'
 DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
+DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
+DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
 DEFAULT_S3_REGION = ''
 DEFAULT_S3_BUCKET = ''
 DEFAULT_S3_SECRET_ACCESS_KEY = ''
@@ -101,11 +103,13 @@ class BuildNodeConfig(BaseConfig):
             'pulp_user': DEFAULT_PULP_USER,
             'pulp_password': DEFAULT_PULP_PASSWORD,
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
+            'pulp_timeout': DEFAULT_PULP_TIMEOUT,
             's3_region': DEFAULT_S3_REGION,
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
-            'base_arch': DEFAULT_BASE_ARCH
+            'base_arch': DEFAULT_BASE_ARCH,
+            'request_timeout': DEFAULT_REQUEST_TIMEOUT
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -131,7 +135,10 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True},
-            'base_arch': {'type': 'string', 'nullable': False}
+            'base_arch': {'type': 'string', 'nullable': False},
+            'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
+                             'required': True},
+            'request_timeout': {'type': 'integer', 'required': True},
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)

@@ -164,7 +164,8 @@ class MockSupervisor(object):
                 self.__scrub_mock_environment(config_path.decode('utf-8'))
                 locks_cursor.pop(config_file)
                 txn.delete(config_file, db=stats_db)
-                os.remove(config_path)
+                if os.path.exists(config_path):
+                    os.remove(config_path)
                 continue
             elif current_ts - creation_ts > self.__refresh_time:
                 # an environment is outdated, regenerate its cache
@@ -173,6 +174,26 @@ class MockSupervisor(object):
                 self.__scrub_mock_environment(config_path)
                 txn.put(config_file, struct.pack('iii', current_ts,
                                                  current_ts, 0), db=stats_db)
+
+    def __generate_site_defaults_config(self):
+        """
+        Generate site-defaults.cfg in MockSupervisor working directory path
+        """
+        config_params = (
+            # Secure Boot options
+            'config_opts["macros"]["%__pesign_cert"] = "%pe_signing_cert"\n',
+            'config_opts["macros"]["%__pesign_client_cert"] = "%pe_signing_cert"\n',
+            'config_opts["macros"]["%__pesign_client_token"] = "%pe_signing_token"\n',
+            'config_opts["macros"]["%__pesign_token"] = "-t %pe_signing_token"\n',
+            'config_opts["plugin_conf"]["bind_mount_enable"] = True\n',
+        )
+        config_path = os.path.join(self.__storage_dir, 'site-defaults.cfg')
+        self.__log.info(
+            'generating site-defaults.cfg in the %s directory',
+            self.__storage_dir,
+        )
+        with open(config_path, 'w') as config:
+            config.writelines(config_params)
 
     def __init_storage(self):
         """
@@ -195,14 +216,15 @@ class MockSupervisor(object):
             self.__log.info('initializing mock supervisor storage in the {0} '
                             'directory'.format(self.__storage_dir))
             os.makedirs(self.__storage_dir)
-        for mock_cfg in ('logging.ini', 'site-defaults.cfg'):
-            dst = os.path.join(self.__storage_dir, mock_cfg)
-            src = os.path.join('/etc/mock/', mock_cfg)
-            if not os.path.exists(src):
-                raise IOError("No such file or directory: '{}'".format(src))
+        self.__generate_site_defaults_config()
+        log_file = 'logging.ini'
+        dst = os.path.join(self.__storage_dir, log_file)
+        src = os.path.join('/etc/mock/', log_file)
+        if not os.path.exists(src):
+            raise IOError("No such file or directory: '{}'".format(src))
 
-            if not os.path.exists(dst):
-                os.symlink(src, dst)
+        if not os.path.exists(dst):
+            os.symlink(src, dst)
         return lmdb.open(os.path.join(self.__storage_dir,
                                       'mock_supervisor.lmdb'), max_dbs=2)
 

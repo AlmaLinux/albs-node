@@ -377,6 +377,8 @@ class BaseRPMBuilder(BaseBuilder):
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value
+            elif not task.is_secure_boot and key == 'macros':
+                continue
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
@@ -384,10 +386,9 @@ class BaseRPMBuilder(BaseBuilder):
             rpmbuild_networking=True, use_host_resolv=True,
             yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
         )
-        if config.pesign_support:
+        if task.is_secure_boot:
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/var/run/pesign', '/var/run/pesign'),
-                       ('/etc/pki/kmod', '/etc/pki/kmod')])
+                True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(
