@@ -5,7 +5,7 @@ import tempfile
 import time
 import shutil
 from concurrent.futures import as_completed, ThreadPoolExecutor
-from typing import List
+from typing import List, Tuple, Optional
 
 from fsplit.filesplit import Filesplit
 from pulpcore.client.pulpcore.configuration import Configuration
@@ -102,7 +102,7 @@ class PulpBaseUploader(BaseUploader):
                                   f'details: {result}')
         return result
 
-    def _create_upload(self, file_path: str) -> (str, int):
+    def _create_upload(self, file_path: str) -> Tuple[str, int]:
         """
 
         Parameters
@@ -143,8 +143,14 @@ class PulpBaseUploader(BaseUploader):
         response = self._uploads_client.commit(
             reference, {'sha256': file_sha256},
             _request_timeout=self._requests_timeout)
-        task_result = self._wait_for_task_completion(response.task)
-        return task_result.created_resources[0]
+        try:
+            task_result = self._wait_for_task_completion(response.task)
+            return task_result.created_resources[0]
+        except TaskFailedError:
+            pulp_href = self.check_if_artifact_exists(file_sha256)
+            if pulp_href:
+                return pulp_href
+            raise
 
     def _put_large_file(self, file_path: str, reference: str):
         temp_dir = tempfile.mkdtemp(prefix='pulp_uploader_')
@@ -185,7 +191,7 @@ class PulpBaseUploader(BaseUploader):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
-    def check_if_artifact_exists(self, sha256: str) -> str:
+    def check_if_artifact_exists(self, sha256: str) -> Optional[str]:
         response = self._artifacts_client.list(
             sha256=sha256, _request_timeout=self._requests_timeout)
         if response.results:
