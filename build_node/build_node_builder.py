@@ -92,15 +92,11 @@ class BuildNodeBuilder(threading.Thread):
             task_log_handler = None
             success = False
             excluded = False
-            excluded_exception = None
-            build_artifacts = []
             try:
                 self.__logger.info('processing the task:\n%s', task)
                 os.makedirs(artifacts_dir)
                 task_log_handler = self.__init_task_logger(task_log_file)
                 self.__build_packages(task, task_dir, artifacts_dir)
-                build_artifacts = self.__upload_artifacts(
-                    artifacts_dir, task_log_file)
                 success = True
             except BuildError as e:
                 self.__logger.exception(
@@ -109,12 +105,11 @@ class BuildNodeBuilder(threading.Thread):
                     str(e),
                 )
             except BuildExcluded as ee:
-                excluded_exception = ee
                 excluded = True
                 self.__logger.info(
                     'task %i build excluded: %s',
                     task.id,
-                    str(excluded_exception),
+                    str(ee),
                 )
             except Exception as e:
                 self.__logger.exception(
@@ -124,20 +119,25 @@ class BuildNodeBuilder(threading.Thread):
                 )
                 self.__sentry.capture_exception(e)
             finally:
-                if not success:
-                    try:
-                        build_artifacts = self.__upload_artifacts(
-                            artifacts_dir, task_log_file, only_logs=True)
-                    except Exception as e:
-                        self.__logger.exception(
-                            'Cannot upload task artifacts: %s.', e)
-                        self.__sentry.capture_exception(e)
-                    if excluded_exception is not None:
+                try:
+                    build_artifacts = self.__upload_artifacts(
+                        artifacts_dir, task_log_file, only_logs=(not success))
+                except Exception as e:
+                    self.__logger.exception('Cannot upload task artifacts: %s',
+                                            str(e))
+                    build_artifacts = []
+
+                try:
+                    if not success and excluded:
                         self.__report_excluded_task(
                             task, build_artifacts)
-                if not excluded:
-                    self.__report_done_task(
-                        task, success=success, artifacts=build_artifacts)
+                    else:
+                        self.__report_done_task(
+                            task, success=success, artifacts=build_artifacts)
+                except Exception as e:
+                    self.__logger.exception(
+                        'Cannot report task status to the main node: %s', str(e)
+                    )
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
@@ -199,6 +199,8 @@ class BuildNodeBuilder(threading.Thread):
         )
         if not task:
             return
+        if not task.get('is_secure_boot'):
+            task['is_secure_boot'] = False
         return Task(**task)
 
     def __report_excluded_task(self, task, artifacts):
@@ -257,7 +259,10 @@ class BuildNodeBuilder(threading.Thread):
         else:
             session_method = self.__session.get
         try:
-            response = session_method(full_url, json=parameters)
+            response = session_method(
+                full_url, json=parameters,
+                timeout=self.__config.request_timeout
+            )
             # Special case when build was already done
             if response.status_code == requests.codes.conflict:
                 return {}

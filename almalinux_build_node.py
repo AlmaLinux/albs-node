@@ -130,8 +130,26 @@ def main(sys_args):
     builder_supervisor = BuilderSupervisor(config, builders, node_terminated)
     builder_supervisor.start()
 
+    global running
     while running:
-        time.sleep(1)
+        if all([b.is_alive for b in builders]):
+            time.sleep(10)
+            continue
+        renewed_builders = []
+        for i, builder in enumerate(builders):
+            if builder.is_alive():
+                renewed_builders.append(builder)
+            else:
+                logging.info('Restarting builder %s', str(builder))
+                builder.join(timeout=60)
+                renewed_builders.append(
+                    BuildNodeBuilder(config, i, node_terminated,
+                                     node_graceful_terminated))
+        builders = renewed_builders
+        if not builder_supervisor.is_alive():
+            builder_supervisor.join(timeout=60)
+            builder_supervisor = BuilderSupervisor(
+                config, builders, node_terminated)
 
 
 if __name__ == '__main__':

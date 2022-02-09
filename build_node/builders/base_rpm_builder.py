@@ -227,7 +227,10 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Path to the unpacked src-RPM sources.
         """
-        srpm_url = self.task.ref.url
+        if self.task.ref.url.endswith('src.rpm'):
+            srpm_url = self.task.ref.url
+        else:
+            srpm_url = self.task.built_srpm_url
         self.logger.info(f'repacking previously built src-RPM {srpm_url}')
         src_dir = os.path.join(self.task_dir, 'srpm_sources')
         os.makedirs(src_dir)
@@ -377,6 +380,8 @@ class BaseRPMBuilder(BaseBuilder):
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value
+            elif not task.is_secure_boot and key == 'macros':
+                continue
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
@@ -384,10 +389,9 @@ class BaseRPMBuilder(BaseBuilder):
             rpmbuild_networking=True, use_host_resolv=True,
             yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
         )
-        if config.pesign_support:
+        if task.is_secure_boot:
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/var/run/pesign', '/var/run/pesign'),
-                       ('/etc/pki/kmod', '/etc/pki/kmod')])
+                True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(

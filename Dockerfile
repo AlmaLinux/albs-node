@@ -1,4 +1,4 @@
-FROM centos:8
+FROM almalinux:8
 
 COPY ./buildnode.repo /etc/yum.repos.d/buildnode.repo
 RUN dnf install -y epel-release && \
