@@ -181,10 +181,6 @@ class MockSupervisor(object):
         """
         config_params = (
             # Secure Boot options
-            'config_opts["macros"]["%__pesign_cert"] = "%pe_signing_cert"\n',
-            'config_opts["macros"]["%__pesign_client_cert"] = "%pe_signing_cert"\n',
-            'config_opts["macros"]["%__pesign_client_token"] = "%pe_signing_token"\n',
-            'config_opts["macros"]["%__pesign_token"] = "-t %pe_signing_token"\n',
             'config_opts["plugin_conf"]["bind_mount_enable"] = True\n',
         )
         config_path = os.path.join(self.__storage_dir, 'site-defaults.cfg')
