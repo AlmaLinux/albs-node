@@ -96,9 +96,6 @@ class BuildNodeBuilder(threading.Thread):
                 self.__logger.info('processing the task:\n%s', task)
                 os.makedirs(artifacts_dir)
                 task_log_handler = self.__init_task_logger(task_log_file)
-                with open('builder_task', 'w') as logs:
-                    logs.write('builder_task')
-                    logs.write(f'task.repositories: {task.repositories}\n')
                 self.__build_packages(task, task_dir, artifacts_dir)
                 success = True
             except BuildError as e:
@@ -171,9 +168,6 @@ class BuildNodeBuilder(threading.Thread):
         """
         self.__logger.info('building on the %s node', platform.node())
         builder_class = get_suitable_builder(task)
-        with open('builder_task', 'a') as logs:
-            logs.write('-----__build_packages-----')
-            logs.write(f'task.repositories: {task.repositories}\n')
         self.__builder = builder_class(self.__config, self.__logger, task,
                                        task_dir, artifacts_dir)
         self.__builder.build()
