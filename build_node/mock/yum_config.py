@@ -22,7 +22,11 @@ class BaseYumConfig(object):
     def render_config_section(section, options):
         cfg = SafeConfigParser()
         cfg.add_section(section)
+        with open('render_config_log', 'w') as logs:
+            logs.write("render_config_section\n")
         for key, value in sorted(options.items()):
+            with open('render_config_log', 'a') as logs:
+                logs.write(f"key: {key}\nvalue: {value}\n-----\n")
             if key == 'repositoryid':
                 continue
             elif key in ('assumeyes', 'best', 'enabled', 'gpgcheck',
@@ -205,7 +209,7 @@ class YumRepositoryConfig(BaseYumConfig):
             A unique name for each repository, single word.
         name : str
             A human readable repository description.
-        priority : str
+        priority : int
             A repository priority
         baseurl : str or list or None
             A URL to the directory where 'repodata' directory is located.

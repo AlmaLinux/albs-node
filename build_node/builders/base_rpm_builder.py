@@ -365,6 +365,9 @@ class BaseRPMBuilder(BaseBuilder):
             Mock chroot configuration.
         """
         yum_repos = []
+        with open('builder_task', 'a') as logs:
+            logs.write('-----generate_mock_config----')
+            logs.write(f'task.repositories: {task.repositories}\n')
         for repo in task.repositories:
             yum_repos.append(
                 YumRepositoryConfig(
