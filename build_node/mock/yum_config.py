@@ -192,7 +192,7 @@ class YumRepositoryConfig(BaseYumConfig):
 
     """Yum repository configuration generator"""
 
-    def __init__(self, repositoryid, name, baseurl=None, mirrorlist=None,
+    def __init__(self, repositoryid, name, priority, baseurl=None, mirrorlist=None,
                  enabled=True, failovermethod=None,
                  gpgcheck=None, gpgkey=None, username=None, password=None,
                  sslverify=None):
@@ -205,6 +205,8 @@ class YumRepositoryConfig(BaseYumConfig):
             A unique name for each repository, single word.
         name : str
             A human readable repository description.
+        priority : str
+            A repository priority
         baseurl : str or list or None
             A URL to the directory where 'repodata' directory is located.
             Multiple URLs could be provided as a list.
