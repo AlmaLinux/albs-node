@@ -14,6 +14,7 @@ import logging
 
 import lmdb
 
+from build_node.utils.file_utils import safe_mkdir
 from build_node.utils.proc_utils import get_current_thread_ident, is_pid_exists
 from .mock_environment import MockEnvironment, MockError
 
@@ -30,7 +31,8 @@ class MockSupervisorError(Exception):
 
 class MockSupervisor(object):
 
-    def __init__(self, storage_dir, idle_time=7200, refresh_time=86400):
+    def __init__(self, storage_dir, database_dir, idle_time=7200,
+                 refresh_time=86400):
         """
         mock environments supervisor initialization.
 
@@ -49,6 +51,10 @@ class MockSupervisor(object):
         """
         self.__log = logging.getLogger(self.__module__)
         self.__storage_dir = storage_dir
+        # Please note that database directory should not be located on
+        # remote filesystem of any kind, that's a limitation of LMDB.
+        # See http://www.lmdb.tech/doc/
+        self.__database_dir = database_dir
         self.__idle_time = idle_time
         self.__refresh_time = refresh_time
         self.__db = self.__init_storage()
@@ -188,7 +194,7 @@ class MockSupervisor(object):
             'generating site-defaults.cfg in the %s directory',
             self.__storage_dir,
         )
-        with open(config_path, 'w') as config:
+        with open(config_path, 'wt') as config:
             config.writelines(config_params)
 
     def __init_storage(self):
@@ -211,7 +217,11 @@ class MockSupervisor(object):
         if not os.path.exists(self.__storage_dir):
             self.__log.info('initializing mock supervisor storage in the {0} '
                             'directory'.format(self.__storage_dir))
-            os.makedirs(self.__storage_dir)
+            safe_mkdir(self.__storage_dir)
+        if not os.path.exists(self.__database_dir):
+            self.__log.info('initializing mock supervisor database '
+                            'in the directory %s', self.__storage_dir)
+            safe_mkdir(self.__database_dir)
         self.__generate_site_defaults_config()
         log_file = 'logging.ini'
         dst = os.path.join(self.__storage_dir, log_file)
@@ -221,7 +231,7 @@ class MockSupervisor(object):
 
         if not os.path.exists(dst):
             os.symlink(src, dst)
-        return lmdb.open(os.path.join(self.__storage_dir,
+        return lmdb.open(os.path.join(self.__database_dir,
                                       'mock_supervisor.lmdb'), max_dbs=2)
 
     def __find_existent_configs(self, config_hash):

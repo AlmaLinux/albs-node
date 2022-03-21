@@ -14,6 +14,7 @@ DEFAULT_BASE_ARCH = 'x86_64'
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
+DEFAULT_DB_DIR = DEFAULT_WORKING_DIR
 DEFAULT_SENTRY_DSN = None
 DEFAULT_NATIVE_BUILDING = True
 DEFAULT_ARM64_BUILDING = False
@@ -89,6 +90,7 @@ class BuildNodeConfig(BaseConfig):
             'node_id': self.generate_node_id(),
             'threads_count': DEFAULT_THREADS_COUNT,
             'working_dir': DEFAULT_WORKING_DIR,
+            'database_dir': DEFAULT_DB_DIR,
             # NOTE: those parameters are added for old Build System code
             #       compatibility
             'git_cache_locks_dir': '/srv/alternatives/git_repos_cache/locks/',
@@ -109,7 +111,7 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
             'base_arch': DEFAULT_BASE_ARCH,
-            'request_timeout': DEFAULT_REQUEST_TIMEOUT
+            'request_timeout': DEFAULT_REQUEST_TIMEOUT,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -118,6 +120,7 @@ class BuildNodeConfig(BaseConfig):
             'node_id': {'type': 'string', 'required': True},
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
             'working_dir': {'type': 'string', 'required': True},
+            'database_dir': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
             'git_repos_cache_dir': {'type': 'string', 'required': True},
             'native_support': {'type': 'boolean', 'default': True},

@@ -145,7 +145,7 @@ class PbuilderSupervisor(object):
 
     """Pbuilder environment supervisor"""
 
-    def __init__(self, storage_dir):
+    def __init__(self, storage_dir, database_dir):
         """
 
         Parameters
@@ -154,6 +154,10 @@ class PbuilderSupervisor(object):
             Directory to store pbuilder configs and LMDB database
         """
         self.__storage_dir = storage_dir
+        # Please note that database directory should not be located on
+        # remote filesystem of any kind, that's a limitation of LMDB.
+        # See http://www.lmdb.tech/doc/
+        self.__database_dir = database_dir
         self.__log = logging.getLogger(self.__module__)
         self.__db = self.__init_storage()
 
@@ -178,7 +182,11 @@ class PbuilderSupervisor(object):
             self.__log.info('initializing pbuilder supervisor storage in the '
                             '{0} directory'.format(self.__storage_dir))
             safe_mkdir(self.__storage_dir)
-        return lmdb.open(os.path.join(self.__storage_dir,
+        if not os.path.exists(self.__database_dir):
+            self.__log.info('initializing pbuilder supervisor database '
+                            'in the directory %s', self.__storage_dir)
+            safe_mkdir(self.__database_dir)
+        return lmdb.open(os.path.join(self.__database_dir,
                                       'pbuilder_supervisor.lmdb'), max_dbs=1)
 
     @staticmethod
