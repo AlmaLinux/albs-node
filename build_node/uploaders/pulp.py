@@ -94,7 +94,7 @@ class PulpBaseUploader(BaseUploader):
         """
         result = self._tasks_client.read(task_href)
         while result.state not in ('failed', 'completed'):
-            time.sleep(20)
+            time.sleep(5)
             result = self._tasks_client.read(
                 task_href, _request_timeout=self._requests_timeout)
         if result.state == 'failed':

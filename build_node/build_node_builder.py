@@ -9,6 +9,7 @@ CloudLinux Build System build thread implementation.
 import datetime
 import logging
 import os
+import time
 import urllib.parse
 import platform
 import random
@@ -177,7 +178,9 @@ class BuildNodeBuilder(threading.Thread):
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
         build_stats = self.__builder.get_build_stats()
-        build_stats_path = os.path.join(artifacts_dir, 'build_stats.yml')
+        timestamp = time.time()
+        build_stats_path = os.path.join(
+            artifacts_dir, f'build_stats_{timestamp}.yml')
         with open(build_stats_path, 'w') as fd:
             fd.write(yaml.dump(build_stats))
         artifacts.append(
