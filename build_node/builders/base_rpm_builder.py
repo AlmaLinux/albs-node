@@ -40,6 +40,23 @@ from build_node.ported import to_unicode
 __all__ = ['BaseRPMBuilder']
 
 
+MODSIGN_CONTENT = """
+%__kmod_brps_added 1
+%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/"  ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print -exec /usr/local/bin/modsign %{modsign_os} {} \\\;}
+%__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -print -exec rm -f {} \\\;}
+%__spec_install_post \\
+        %{?__brp_kmod_set_exec_bit} \\
+        %{?__debug_package:%{__debug_install_post}} \\
+        %{__arch_install_post} \\
+        %{__os_install_post} \\
+        %{?__brp_kmod_restore_perms} \\
+        %{__brp_kmod_sign} \\
+        %{__brp_kmod_post_sign_process} \\
+        %{nil}
+"""
+MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
+
+
 class BaseRPMBuilder(BaseBuilder):
 
     def __init__(self, config, logger, task, task_dir, artifacts_dir):
@@ -394,6 +411,9 @@ class BaseRPMBuilder(BaseBuilder):
             bind_plugin = MockBindMountPluginConfig(
                 True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
+            mock_config.add_file(
+                MockChrootFile(MODSIGN_MACROS_PATH, MODSIGN_CONTENT)
+            )
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(
                 mock_config, config.npm_proxy)
