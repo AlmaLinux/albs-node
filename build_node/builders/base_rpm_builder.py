@@ -40,18 +40,21 @@ from build_node.ported import to_unicode
 __all__ = ['BaseRPMBuilder']
 
 
+# The reason for such many backslash symbols is that in the resulting config
+# we need to get 3 (where 6) and 2 (where 4) backslashes in order for macros
+# to work correctly
 MODSIGN_CONTENT = """
 %__kmod_brps_added 1
-%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/"  ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print -exec /usr/local/bin/modsign %{modsign_os} {} \\\;}
-%__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -print -exec rm -f {} \\\;}
-%__spec_install_post \\
-        %{?__brp_kmod_set_exec_bit} \\
-        %{?__debug_package:%{__debug_install_post}} \\
-        %{__arch_install_post} \\
-        %{__os_install_post} \\
-        %{?__brp_kmod_restore_perms} \\
-        %{__brp_kmod_sign} \\
-        %{__brp_kmod_post_sign_process} \\
+%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/"  ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print -exec /usr/local/bin/modsign %{modsign_os} {} \\\\\\;}
+%__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -print -exec rm -f {} \\\\\\;}
+%__spec_install_post \\\\
+        %{?__brp_kmod_set_exec_bit} \\\\
+        %{?__debug_package:%{__debug_install_post}} \\\\
+        %{__arch_install_post} \\\\
+        %{__os_install_post} \\\\
+        %{?__brp_kmod_restore_perms} \\\\
+        %{__brp_kmod_sign} \\\\
+        %{__brp_kmod_post_sign_process} \\\\
         %{nil}
 """
 MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
