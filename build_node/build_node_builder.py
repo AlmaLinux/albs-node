@@ -89,7 +89,7 @@ class BuildNodeBuilder(threading.Thread):
             ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(task_dir, f'albs.{ts}.log')
+            task_log_file = os.path.join(artifacts_dir, f'albs.{ts}.log')
             task_log_handler = None
             success = False
             excluded = False
@@ -122,7 +122,7 @@ class BuildNodeBuilder(threading.Thread):
             finally:
                 try:
                     build_artifacts = self.__upload_artifacts(
-                        artifacts_dir, task_log_file, only_logs=(not success))
+                        artifacts_dir, only_logs=(not success))
                 except Exception as e:
                     self.__logger.exception('Cannot upload task artifacts: %s',
                                             str(e))
@@ -173,8 +173,7 @@ class BuildNodeBuilder(threading.Thread):
                                        task_dir, artifacts_dir)
         self.__builder.build()
 
-    def __upload_artifacts(self, artifacts_dir, task_log_file,
-                           only_logs: bool = False):
+    def __upload_artifacts(self, artifacts_dir, only_logs: bool = False):
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
         build_stats = self.__builder.get_build_stats()
@@ -185,9 +184,6 @@ class BuildNodeBuilder(threading.Thread):
             fd.write(yaml.dump(build_stats))
         artifacts.append(
             self._pulp_uploader.upload_single_file(build_stats_path)
-        )
-        artifacts.append(
-            self._pulp_uploader.upload_single_file(task_log_file)
         )
         return artifacts
 
