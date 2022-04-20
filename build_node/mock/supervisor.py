@@ -30,7 +30,7 @@ class MockSupervisorError(Exception):
 
 class MockSupervisor(object):
 
-    def __init__(self, storage_dir, idle_time=7200, refresh_time=86400):
+    def __init__(self, storage_dir, host_arch, idle_time=7200, refresh_time=86400):
         """
         mock environments supervisor initialization.
 
@@ -48,6 +48,7 @@ class MockSupervisor(object):
             actively used. Default value is 24 hours.
         """
         self.__log = logging.getLogger(self.__module__)
+        self.__host_arch = host_arch
         self.__storage_dir = storage_dir
         self.__idle_time = idle_time
         self.__refresh_time = refresh_time
@@ -179,10 +180,12 @@ class MockSupervisor(object):
         """
         Generate site-defaults.cfg in MockSupervisor working directory path
         """
-        config_params = (
+        config_params = [
             # Secure Boot options
             'config_opts["plugin_conf"]["bind_mount_enable"] = True\n',
-        )
+        ]
+        if self.__host_arch == 'ppc64le':
+            config_params.append('config_opts["macros"]["%_host_cpu"] = "ppc64le"\n')
         config_path = os.path.join(self.__storage_dir, 'site-defaults.cfg')
         self.__log.info(
             'generating site-defaults.cfg in the %s directory',
