@@ -60,6 +60,7 @@ Which produces the following configuration file section:
     \"\"\"
 """
 
+import collections
 import copy
 from io import StringIO
 import hashlib
@@ -159,12 +160,16 @@ class MockConfig(object):
                               'chroot_setup_cmd': chroot_setup_cmd,
                               'dist': dist, 'releasever': releasever}
         self.__config_opts.update(**kwargs)
+        self.__append_config_opts = collections.defaultdict(list)
         self.__files = {}
         if files:
             for chroot_file in files:
                 self.add_file(chroot_file)
         self.__plugins = {}
         self.__yum_config = yum_config
+
+    def append_config_opt(self, key: str, value: str):
+        self.__append_config_opts[key].append(value)
 
     def add_module_install(self, module_name):
         """
@@ -301,7 +306,7 @@ class MockConfig(object):
         self.__yum_config = yum_config
 
     @staticmethod
-    def render_config_option(option, value):
+    def render_config_option(option, value, append=False):
         """
         Renders ``config_opts`` mock config definition.
 
@@ -311,6 +316,9 @@ class MockConfig(object):
             Option name.
         value : bool or int or str or list or tuple or None
             Option value. Warning: nested dictionaries aren't supported.
+        append : bool, optional
+            If true, option will be rendered as config_opts[key].append(value),
+            instead of config_opts[key] = value
 
         Returns
         -------
@@ -324,6 +332,9 @@ class MockConfig(object):
                 out += 'config_opts[{0}][{1}] = {2}\n'.\
                     format(option, to_mock_config_string(k),
                            to_mock_config_string(v))
+        elif append:
+            out += 'config_opts[{0}].append({1})\n'.\
+                format(option, to_mock_config_string(value))
         else:
             out += 'config_opts[{0}] = {1}\n'.\
                 format(option, to_mock_config_string(value))
@@ -355,6 +366,9 @@ class MockConfig(object):
                 if option == 'root' or value is None:
                     continue
                 fd.write(self.render_config_option(option, value))
+            for option, value_list in sorted(self.__append_config_opts.items()):
+                for value in value_list:
+                    fd.write(self.render_config_option(option, value, append=True))
             for plugin in self.__plugins.values():
                 fd.write(plugin.render_config())
             if self.__yum_config:

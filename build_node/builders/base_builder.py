@@ -294,7 +294,6 @@ class BaseBuilder(object):
         mock_config = MockConfig(target_arch=target_arch, dist='el7',
                                  chroot_setup_cmd=chroot_setup_cmd,
                                  use_boostrap_container=False,
-                                 use_nspawn=False,
                                  rpmbuild_networking=True,
                                  use_host_resolv=True,
                                  yum_config=yum_config,

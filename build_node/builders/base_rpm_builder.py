@@ -404,11 +404,12 @@ class BaseRPMBuilder(BaseBuilder):
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
-            dist=task.platform.data.get('mock_dist'), use_nspawn=False,
+            dist=task.platform.data.get('mock_dist'),
             rpmbuild_networking=True, use_host_resolv=True,
             yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
         )
         if task.is_secure_boot:
+            mock_config.append_config_opt('nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin')
             bind_plugin = MockBindMountPluginConfig(
                 True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
