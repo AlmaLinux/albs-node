@@ -10,7 +10,6 @@ class TaskRepo(BaseModel):
 
     name: str
     url: str
-    priority: int
 
 
 class TaskRef(BaseModel):
@@ -58,3 +57,4 @@ class Artifact(BaseModel):
     # pulp_rpm or s3
     type: str
     href: str
+    sha256: str
