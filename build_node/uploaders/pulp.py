@@ -94,7 +94,7 @@ class PulpBaseUploader(BaseUploader):
         """
         result = self._tasks_client.read(task_href)
         while result.state not in ('failed', 'completed'):
-            time.sleep(5)
+            time.sleep(20)
             result = self._tasks_client.read(
                 task_href, _request_timeout=self._requests_timeout)
         if result.state == 'failed':
@@ -248,7 +248,8 @@ class PulpBaseUploader(BaseUploader):
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
-            type='rpm' if filename.endswith('.rpm') else 'build_log'
+            type='rpm' if filename.endswith('.rpm') else 'build_log',
+            sha256=file_sha256
         )
 
 
