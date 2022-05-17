@@ -11,7 +11,6 @@ from functools import wraps
 import os
 import traceback
 
-import requests
 import yaml
 
 from build_node.mock.mock_environment import MockError
@@ -22,7 +21,6 @@ from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.utils.file_utils import safe_mkdir, chown_recursive
 from build_node.utils.git_utils import MirroredGitRepo, git_get_commit_id
 from .. import build_node_globals as node_globals
-from ..build_node_errors import BuildError
 
 __all__ = ['measure_stage', 'BaseBuilder']
 
@@ -88,14 +86,6 @@ class BaseBuilder(object):
         self._build_stats = {}
         self._pre_build_hook_target_arch = self.config.base_arch
 
-    @staticmethod
-    def __is_repo_available(repo_url: str) -> bool:
-        try:
-            response = requests.get(repo_url, timeout=10)
-            return response.status_code == 200
-        except Exception:
-            return False
-
     def checkout_git_sources(self, git_sources_dir, ref):
         """
         Checkouts a project sources from the specified git repository.
@@ -112,10 +102,6 @@ class BaseBuilder(object):
         cla.utils.alt_git_repo.WrappedGitRepo
             Git repository wrapper.
         """
-        self.logger.debug('Checking repository %s is available', ref.url)
-        if not self.__is_repo_available(ref.url):
-            raise BuildError(f'Repository {ref.url} does not exist '
-                             f'or is unavailable')
         self.logger.info('checking out {0} from {1}'.format(
             ref.git_ref, ref.url))
         # FIXME: Understand why sometimes we hold repository lock more
