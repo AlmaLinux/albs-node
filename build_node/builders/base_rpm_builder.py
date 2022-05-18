@@ -392,8 +392,9 @@ class BaseRPMBuilder(BaseBuilder):
                     repositoryid=repo.name,
                     name=repo.name,
                     priority=str(repo.priority),
-                    baseurl=repo.url),
+                    baseurl=repo.url,
                     **repo_kwargs
+                ),
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
