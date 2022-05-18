@@ -69,7 +69,7 @@ class BaseBuilder(object):
             Build node configuration object.
         logger : logging.Logger
             Current build thread logger.
-        task : dict
+        task : Task
             Build task.
         task_dir : str
             Build task working directory.
@@ -94,7 +94,7 @@ class BaseBuilder(object):
         ----------
         git_sources_dir : str
             Target directory path.
-        ref : str
+        ref : TaskRef
             Git (gerrit) reference.
 
         Returns
@@ -248,20 +248,23 @@ class BaseBuilder(object):
             yum_repos = [
                 YumRepositoryConfig(repositoryid='centos7-os', name='centos7-os',
                                     baseurl='http://mirror.centos.org/'
-                                            'altarch/7/os/$basearch/'),
+                                            'altarch/7/os/$basearch/',
+                                    priority='10'),
                 YumRepositoryConfig(repositoryid='centos7-updates',
                                     name='centos7-updates',
                                     baseurl='http://mirror.centos.org/altarch/7'
-                                            '/updates/$basearch/')
+                                            '/updates/$basearch/', priority='10')
             ]
         else:
             yum_repos = [
                 YumRepositoryConfig(repositoryid='cl7-os', name='cl7-os',
                                     baseurl='http://koji.cloudlinux.com/'
-                                            'cloudlinux/7/os/x86_64/'),
+                                            'cloudlinux/7/os/x86_64/',
+                                    priority='10'),
                 YumRepositoryConfig(repositoryid='cl7-updates', name='cl7-updates',
                                     baseurl='http://koji.cloudlinux.com/'
-                                            'cloudlinux/7/updates/x86_64/')
+                                            'cloudlinux/7/updates/x86_64/',
+                                    priority='10')
             ]
         return YumConfig(repositories=yum_repos)
 
@@ -330,7 +333,7 @@ class BaseBuilder(object):
         if not os.path.exists(config_path):
             return []
         with open(config_path, 'r') as fd:
-            return yaml.load(fd).get('dependencies', [])
+            return yaml.Loader(fd).get_data().get('dependencies', [])
 
     def __log_commit_id(self, git_sources_dir):
         """
