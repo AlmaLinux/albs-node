@@ -384,12 +384,17 @@ class BaseRPMBuilder(BaseBuilder):
         """
         yum_repos = []
         for repo in task.repositories:
+            repo_kwargs = {}
+            if re.search(r'AlmaLinux-\d-.*-\d+-br', repo.url):
+                repo_kwargs['module_hotfixes'] = True
             yum_repos.append(
                 YumRepositoryConfig(
                     repositoryid=repo.name,
                     name=repo.name,
                     priority=str(repo.priority),
-                    baseurl=repo.url)
+                    baseurl=repo.url,
+                    **repo_kwargs
+                ),
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,

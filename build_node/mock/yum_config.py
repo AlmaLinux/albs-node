@@ -26,7 +26,7 @@ class BaseYumConfig(object):
             if key == 'repositoryid':
                 continue
             elif key in ('assumeyes', 'best', 'enabled', 'gpgcheck',
-                         'obsoletes'):
+                         'obsoletes', 'module_hotfixes'):
                 cfg.set(section, key, BaseYumConfig.render_bool_option(value))
             elif key in ('debuglevel', 'retries'):
                 cfg.set(section, key, str(value))
@@ -195,7 +195,7 @@ class YumRepositoryConfig(BaseYumConfig):
     def __init__(self, repositoryid, name, priority, baseurl=None, mirrorlist=None,
                  enabled=True, failovermethod=None,
                  gpgcheck=None, gpgkey=None, username=None, password=None,
-                 sslverify=None):
+                 sslverify=None, module_hotfixes=None):
         """
         Yum repository initialization.
 
