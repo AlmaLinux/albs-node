@@ -1,3 +1,4 @@
+import gzip
 import logging
 import os
 import csv
@@ -278,9 +279,15 @@ class PulpRpmUploader(PulpBaseUploader):
         for file_ in super().get_artifacts_list(artifacts_dir):
             if file_.endswith('.rpm') and not only_logs:
                 artifacts.append(file_)
-            elif file_.endswith('.log'):
-                artifacts.append(file_)
             elif file_.endswith('.cfg'):
+                artifacts.append(file_)
+            elif file_.endswith('.log'):
+                with open(file_, 'rb') as file:
+                    content = file.read()
+                with open(file_, 'wb') as file:
+                    self._logger.info(content)
+                    compressed_content = gzip.compress(content)
+                    file.write(compressed_content)
                 artifacts.append(file_)
         return artifacts
 
