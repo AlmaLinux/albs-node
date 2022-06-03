@@ -58,3 +58,4 @@ class Artifact(BaseModel):
     # pulp_rpm or s3
     type: str
     href: str
+    sha256: str
