@@ -25,7 +25,11 @@ from build_node import constants
 from build_node.builders import get_suitable_builder
 from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.uploaders.pulp import PulpRpmUploader
-from build_node.utils.file_utils import clean_dir, rm_sudo
+from build_node.utils.file_utils import (
+    clean_dir,
+    filter_files,
+    rm_sudo,
+)
 from build_node.models import Task
 from build_node.utils.sentry_utils import Sentry
 
@@ -120,9 +124,11 @@ class BuildNodeBuilder(threading.Thread):
                 )
                 self.__sentry.capture_exception(e)
             finally:
+                only_logs = (not (bool(filter_files(
+                    artifacts_dir, lambda f: f.endswith('.rpm')))))
                 try:
                     build_artifacts = self.__upload_artifacts(
-                        artifacts_dir, task_log_file, only_logs=(not success))
+                        artifacts_dir, task_log_file, only_logs=only_logs)
                 except Exception as e:
                     self.__logger.exception('Cannot upload task artifacts: %s',
                                             str(e))
