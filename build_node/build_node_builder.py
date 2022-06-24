@@ -177,7 +177,7 @@ class BuildNodeBuilder(threading.Thread):
     ):
         cas_metadata = {
             'build_id': task.build_id,
-            # should we take build host from env?
+            # TODO: should we take build host from env?
             'build_host': 'build.almalinux.org',
             'build_arch': task.arch,
             'built_by': task.created_by.full_name,
@@ -218,7 +218,6 @@ class BuildNodeBuilder(threading.Thread):
                 for future in as_completed(futures):
                     artifact = futures[future]
                     cas_artifact_hash = future.result()
-                    self.__logger.info('%s', artifact.name)
                     artifact.cas_hash = cas_artifact_hash
 
     def __build_packages(self, task, task_dir, artifacts_dir):
@@ -278,7 +277,9 @@ class BuildNodeBuilder(threading.Thread):
         kwargs = {
             'task_id': task.id,
             'status': 'excluded',
-            'artifacts': [artifact.dict() for artifact in artifacts]
+            'artifacts': [artifact.dict() for artifact in artifacts],
+            'is_cas_authenticated': task.is_cas_authenticated,
+            'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
             'build_done',
@@ -292,7 +293,9 @@ class BuildNodeBuilder(threading.Thread):
         kwargs = {
             'task_id': task.id,
             'status': 'done' if success else 'failed',
-            'artifacts': [artifact.dict() for artifact in artifacts]
+            'artifacts': [artifact.dict() for artifact in artifacts],
+            'is_cas_authenticated': task.is_cas_authenticated,
+            'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
             'build_done',

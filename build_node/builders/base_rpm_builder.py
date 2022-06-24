@@ -118,9 +118,10 @@ class BaseRPMBuilder(BaseBuilder):
                                 f'git://{git_sources_dir}',
                                 return_json=True,
                             )
-                            # TODO:
-                            self.task.is_cas_authenticated = bool(
-                                cas_json.get('status'))
+                            # it should return 0 for authenticated
+                            # and trusted commits
+                            self.task.is_cas_authenticated = not bool(
+                                cas_json.get('status', 1))
                             self.task.alma_commit_cas_hash = cas_json.get(
                                 'hash')
                     except ProcessExecutionError:
