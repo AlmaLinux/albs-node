@@ -18,6 +18,7 @@ from distutils.dir_util import copy_tree
 
 import validators
 import rpm
+from plumbum.commands.processes import ProcessExecutionError
 
 from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
@@ -60,7 +61,8 @@ MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
 
 class BaseRPMBuilder(BaseBuilder):
 
-    def __init__(self, config, logger, task, task_dir, artifacts_dir):
+    def __init__(self, config, logger, task,
+                 task_dir, artifacts_dir, cas_wrapper):
         """
         RPM builder initialization.
 
@@ -76,9 +78,12 @@ class BaseRPMBuilder(BaseBuilder):
             Build task working directory.
         artifacts_dir : str
             Build artifacts (src-RPM, RPM(s), logs, etc) output directory.
+        cas_wrapper: CasWrapper
+            CasWrapper instance
         """
         super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
                                              artifacts_dir)
+        self.cas_wrapper = cas_wrapper
 
     @measure_stage('build_all')
     def build(self):
@@ -107,6 +112,21 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
+                    try:
+                        with self.cas_wrapper as cas:
+                            cas_json = cas.authenticate(
+                                f'git://{git_sources_dir}',
+                                return_json=True,
+                            )
+                            # TODO:
+                            self.task.is_cas_authenticated = bool(
+                                cas_json.get('status'))
+                            self.task.alma_commit_cas_hash = cas_json.get(
+                                'hash')
+                    except ProcessExecutionError:
+                        self.logger.exception('Cannot authenticate %s:',
+                                              git_sources_dir)
+                        self.task.is_cas_authenticated = False
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):

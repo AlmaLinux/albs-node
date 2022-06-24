@@ -6,6 +6,7 @@
 CloudLinux Build System build thread implementation.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import logging
 import os
@@ -16,6 +17,7 @@ import random
 import threading
 import typing
 
+from cas_wrapper import CasWrapper
 import yaml
 import requests
 import requests.adapters
@@ -30,7 +32,8 @@ from build_node.utils.file_utils import (
     filter_files,
     rm_sudo,
 )
-from build_node.models import Task
+from build_node.models import Task, Artifact
+from build_node.utils.rpm_utils import split_filename
 from build_node.utils.sentry_utils import Sentry
 
 
@@ -68,6 +71,10 @@ class BuildNodeBuilder(threading.Thread):
         # current task builder object
         self.__builder = None
         self.__session = None
+        self._cas_wrapper = CasWrapper(
+            self.__config.cas_api_key,
+            self.__config.cas_signer_id,
+        )
         self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
             self.__config.pulp_password, self.__config.pulp_chunk_size
@@ -103,24 +110,21 @@ class BuildNodeBuilder(threading.Thread):
                 task_log_handler = self.__init_task_logger(task_log_file)
                 self.__build_packages(task, task_dir, artifacts_dir)
                 success = True
-            except BuildError as e:
+            except BuildError:
                 self.__logger.exception(
-                    'task %i build failed: %s.',
+                    'task %i build failed:',
                     task.id,
-                    str(e),
                 )
-            except BuildExcluded as ee:
+            except BuildExcluded:
                 excluded = True
                 self.__logger.info(
-                    'task %i build excluded: %s',
+                    'task %i build excluded:',
                     task.id,
-                    str(ee),
                 )
             except Exception as e:
                 self.__logger.exception(
-                    'task %i build failed: %s.',
+                    'task %i build failed:',
                     task.id,
-                    str(e),
                 )
                 self.__sentry.capture_exception(e)
             finally:
@@ -129,10 +133,17 @@ class BuildNodeBuilder(threading.Thread):
                 try:
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, task_log_file, only_logs=only_logs)
-                except Exception as e:
-                    self.__logger.exception('Cannot upload task artifacts: %s',
-                                            str(e))
+                except Exception:
+                    self.__logger.exception('Cannot upload task artifacts:')
                     build_artifacts = []
+
+                try:
+                    self.__notarize_build_artifacts(
+                        task,
+                        build_artifacts,
+                    )
+                except Exception:
+                    self.__logger.exception('Cannot notarize build artifacts:')
 
                 try:
                     if not success and excluded:
@@ -141,10 +152,9 @@ class BuildNodeBuilder(threading.Thread):
                     else:
                         self.__report_done_task(
                             task, success=success, artifacts=build_artifacts)
-                except Exception as e:
+                except Exception:
                     self.__logger.exception(
-                        'Cannot report task status to the main node: %s', str(e)
-                    )
+                        'Cannot report task status to the main node:')
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
@@ -159,6 +169,57 @@ class BuildNodeBuilder(threading.Thread):
                     #       without root permissions
                     rm_sudo(task_dir)
                 self.__builder = None
+
+    def __notarize_build_artifacts(
+        self,
+        task: Task,
+        build_artifacts: typing.List[Artifact],
+    ):
+        cas_metadata = {
+            'build_id': task.build_id,
+            # should we take build host from env?
+            'build_host': 'build.almalinux.org',
+            'build_arch': task.arch,
+            'built_by': task.created_by.full_name,
+            'sbom_api': '0.1',
+        }
+        if task.is_alma_source() and task.alma_commit_cas_hash:
+            cas_metadata['alma_commit_sbom_hash'] = task.alma_commit_cas_hash
+        if task.ref.git_ref:
+            cas_metadata.update({
+                'source_type': 'git',
+                'git_url': task.ref.url,
+                'git_ref': task.ref.git_ref,
+                'git_commit': task.ref.git_commit_hash,
+            })
+        else:
+            srpm = next((
+                artifact for artifact in build_artifacts
+                if artifact.name.endswith('.src.rpm')
+            ), None)
+            if srpm:
+                name, version, release, epoch, arch = split_filename(srpm.name)
+                srpm_nevra = f'{name}-{version}-{release}-{arch}'
+                if epoch:
+                    srpm_nevra = f'{epoch}:{srpm_nevra}'
+                cas_metadata.update({
+                    'source_type': 'srpm',
+                    'srpm_url': task.ref.url,
+                    'srpm_sha256': srpm.sha256,
+                    'srpm_nevra': srpm_nevra,
+                })
+        with self._cas_wrapper as cas:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {
+                    executor.submit(
+                        cas.notarize, artifact.path, cas_metadata): artifact
+                    for artifact in build_artifacts
+                }
+                for future in as_completed(futures):
+                    artifact = futures[future]
+                    cas_artifact_hash = future.result()
+                    self.__logger.info('%s', artifact.name)
+                    artifact.cas_hash = cas_artifact_hash
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
@@ -176,7 +237,8 @@ class BuildNodeBuilder(threading.Thread):
         self.__logger.info('building on the %s node', platform.node())
         builder_class = get_suitable_builder(task)
         self.__builder = builder_class(self.__config, self.__logger, task,
-                                       task_dir, artifacts_dir)
+                                       task_dir, artifacts_dir,
+                                       self._cas_wrapper)
         self.__builder.build()
 
     def __upload_artifacts(self, artifacts_dir, task_log_file,

@@ -1,0 +1,6 @@
+[codenotary]
+name=Codenotary repository
+baseurl=https://packages.codenotary.org/rpm/vcn
+gpgcheck=1
+gpgkey=https://packages.codenotary.org/packages.codenotary.org.gpp.key
+enabled=1

@@ -135,6 +135,8 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True},
+            'cas_api_key': {'type': 'string', 'nullable': True},
+            'cas_signer_id': {'type': 'string', 'nullable': True},
             'base_arch': {'type': 'string', 'nullable': False},
             'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
                              'required': True},

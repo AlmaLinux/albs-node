@@ -17,12 +17,18 @@ class TaskRef(BaseModel):
 
     url: str
     git_ref: typing.Optional[str]
+    ref_type: int
+    git_commit_hash: typing.Optional[str]
 
 
 class TaskCreatedBy(BaseModel):
 
     name: str
     email: str
+
+    @property
+    def full_name(self):
+        return f'{self.name} {self.email}'
 
 
 class TaskPlatform(BaseModel):
@@ -39,6 +45,9 @@ class Task(BaseModel):
     id: int
     arch: str
     ref: TaskRef
+    build_id: int
+    alma_commit_cas_hash: typing.Optional[str]
+    is_cas_authenticated: bool = False
     platform: TaskPlatform
     created_by: TaskCreatedBy
     repositories: typing.List[TaskRepo]
@@ -59,3 +68,5 @@ class Artifact(BaseModel):
     type: str
     href: str
     sha256: str
+    path: str
+    cas_hash: typing.Optional[str]
