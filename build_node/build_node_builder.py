@@ -137,13 +137,10 @@ class BuildNodeBuilder(threading.Thread):
                     self.__logger.exception('Cannot upload task artifacts:')
                     build_artifacts = []
 
-                try:
-                    self.__notarize_build_artifacts(
-                        task,
-                        build_artifacts,
-                    )
-                except Exception:
-                    self.__logger.exception('Cannot notarize build artifacts:')
+                self.__notarize_build_artifacts(
+                    task,
+                    build_artifacts,
+                )
 
                 try:
                     if not success and excluded:
@@ -170,6 +167,31 @@ class BuildNodeBuilder(threading.Thread):
                     rm_sudo(task_dir)
                 self.__builder = None
 
+    def __notarize_artifacts(
+        self,
+        build_artifacts: typing.List[Artifact],
+        cas_metadata: typing.Dict[str, str],
+    ) -> bool:
+        all_artifacts_notarized = True
+        with self._cas_wrapper as cas:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {
+                    executor.submit(cas.notarize, artifact.path,
+                                    cas_metadata): artifact
+                    for artifact in build_artifacts
+                    if not artifact.cas_hash
+                }
+                for future in as_completed(futures):
+                    artifact = futures[future]
+                    try:
+                        cas_artifact_hash = future.result()
+                    except Exception:
+                        self.__logger.exception('Cannot notarize artifact:')
+                        all_artifacts_notarized = False
+                        continue
+                    artifact.cas_hash = cas_artifact_hash
+        return all_artifacts_notarized
+
     def __notarize_build_artifacts(
         self,
         task: Task,
@@ -177,7 +199,7 @@ class BuildNodeBuilder(threading.Thread):
     ):
         cas_metadata = {
             'build_id': task.build_id,
-            # TODO: should we take build host from env?
+            # TODO: should we take host from env?
             'build_host': 'build.almalinux.org',
             'build_arch': task.arch,
             'built_by': task.created_by.full_name,
@@ -198,8 +220,9 @@ class BuildNodeBuilder(threading.Thread):
                 if artifact.name.endswith('.src.rpm')
             ), None)
             if srpm:
+                # TODO: may be we should take SRPM NEVRA from pulp
                 name, version, release, epoch, arch = split_filename(srpm.name)
-                srpm_nevra = f'{name}-{version}-{release}-{arch}'
+                srpm_nevra = f'{name}-{version}-{release}.{arch}'
                 if epoch:
                     srpm_nevra = f'{epoch}:{srpm_nevra}'
                 cas_metadata.update({
@@ -208,17 +231,12 @@ class BuildNodeBuilder(threading.Thread):
                     'srpm_sha256': srpm.sha256,
                     'srpm_nevra': srpm_nevra,
                 })
-        with self._cas_wrapper as cas:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {
-                    executor.submit(
-                        cas.notarize, artifact.path, cas_metadata): artifact
-                    for artifact in build_artifacts
-                }
-                for future in as_completed(futures):
-                    artifact = futures[future]
-                    cas_artifact_hash = future.result()
-                    artifact.cas_hash = cas_artifact_hash
+        all_artifacts_notarized = self.__notarize_artifacts(
+            build_artifacts, cas_metadata)
+        # ensure that all artifacts notarized
+        while not all_artifacts_notarized:
+            all_artifacts_notarized = self.__notarize_artifacts(
+                build_artifacts, cas_metadata)
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
