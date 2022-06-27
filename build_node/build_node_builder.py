@@ -6,7 +6,6 @@
 CloudLinux Build System build thread implementation.
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime
 import logging
 import os
@@ -32,8 +31,8 @@ from build_node.utils.file_utils import (
     filter_files,
     rm_sudo,
 )
-from build_node.models import Task, Artifact
-from build_node.utils.rpm_utils import split_filename
+from build_node.models import Task
+from build_node.utils.codenotary import notarize_build_artifacts
 from build_node.utils.sentry_utils import Sentry
 
 
@@ -137,9 +136,12 @@ class BuildNodeBuilder(threading.Thread):
                     self.__logger.exception('Cannot upload task artifacts:')
                     build_artifacts = []
 
-                self.__notarize_build_artifacts(
+                notarize_build_artifacts(
                     task,
                     build_artifacts,
+                    self._cas_wrapper,
+                    self.__logger,
+                    self.__config.master_url,
                 )
 
                 try:
@@ -166,77 +168,6 @@ class BuildNodeBuilder(threading.Thread):
                     #       without root permissions
                     rm_sudo(task_dir)
                 self.__builder = None
-
-    def __notarize_artifacts(
-        self,
-        build_artifacts: typing.List[Artifact],
-        cas_metadata: typing.Dict[str, str],
-    ) -> bool:
-        all_artifacts_notarized = True
-        with self._cas_wrapper as cas:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {
-                    executor.submit(cas.notarize, artifact.path,
-                                    cas_metadata): artifact
-                    for artifact in build_artifacts
-                    if not artifact.cas_hash
-                }
-                for future in as_completed(futures):
-                    artifact = futures[future]
-                    try:
-                        cas_artifact_hash = future.result()
-                    except Exception:
-                        self.__logger.exception('Cannot notarize artifact:')
-                        all_artifacts_notarized = False
-                        continue
-                    artifact.cas_hash = cas_artifact_hash
-        return all_artifacts_notarized
-
-    def __notarize_build_artifacts(
-        self,
-        task: Task,
-        build_artifacts: typing.List[Artifact],
-    ):
-        cas_metadata = {
-            'build_id': task.build_id,
-            # TODO: should we take host from env?
-            'build_host': 'build.almalinux.org',
-            'build_arch': task.arch,
-            'built_by': task.created_by.full_name,
-            'sbom_api': '0.1',
-        }
-        if task.is_alma_source() and task.alma_commit_cas_hash:
-            cas_metadata['alma_commit_sbom_hash'] = task.alma_commit_cas_hash
-        if task.ref.git_ref:
-            cas_metadata.update({
-                'source_type': 'git',
-                'git_url': task.ref.url,
-                'git_ref': task.ref.git_ref,
-                'git_commit': task.ref.git_commit_hash,
-            })
-        else:
-            srpm = next((
-                artifact for artifact in build_artifacts
-                if artifact.name.endswith('.src.rpm')
-            ), None)
-            if srpm:
-                # TODO: may be we should take SRPM NEVRA from pulp
-                name, version, release, epoch, arch = split_filename(srpm.name)
-                srpm_nevra = f'{name}-{version}-{release}.{arch}'
-                if epoch:
-                    srpm_nevra = f'{epoch}:{srpm_nevra}'
-                cas_metadata.update({
-                    'source_type': 'srpm',
-                    'srpm_url': task.ref.url,
-                    'srpm_sha256': srpm.sha256,
-                    'srpm_nevra': srpm_nevra,
-                })
-        all_artifacts_notarized = self.__notarize_artifacts(
-            build_artifacts, cas_metadata)
-        # ensure that all artifacts notarized
-        while not all_artifacts_notarized:
-            all_artifacts_notarized = self.__notarize_artifacts(
-                build_artifacts, cas_metadata)
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
@@ -297,6 +228,7 @@ class BuildNodeBuilder(threading.Thread):
             'status': 'excluded',
             'artifacts': [artifact.dict() for artifact in artifacts],
             'is_cas_authenticated': task.is_cas_authenticated,
+            'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
@@ -313,6 +245,7 @@ class BuildNodeBuilder(threading.Thread):
             'status': 'done' if success else 'failed',
             'artifacts': [artifact.dict() for artifact in artifacts],
             'is_cas_authenticated': task.is_cas_authenticated,
+            'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
