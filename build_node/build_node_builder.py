@@ -70,10 +70,7 @@ class BuildNodeBuilder(threading.Thread):
         # current task builder object
         self.__builder = None
         self.__session = None
-        self._cas_wrapper = CasWrapper(
-            self.__config.cas_api_key,
-            self.__config.cas_signer_id,
-        )
+        self._cas_wrapper = None
         self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
             self.__config.pulp_password, self.__config.pulp_chunk_size
@@ -86,6 +83,11 @@ class BuildNodeBuilder(threading.Thread):
         log_file = os.path.join(self.__working_dir,
                                 'bt-{0}.log'.format(self.name))
         self.__logger = self.init_thread_logger(log_file)
+        self._cas_wrapper = CasWrapper(
+            cas_api_key=self.__config.cas_api_key,
+            cas_signer_id=self.__config.cas_signer_id,
+            logger=self.__logger,
+        )
         self.__logger.info('starting %s', self.name)
         self.__generate_request_session()
         while not self.__graceful_terminated_event.is_set():
@@ -140,7 +142,6 @@ class BuildNodeBuilder(threading.Thread):
                     task,
                     build_artifacts,
                     self._cas_wrapper,
-                    self.__logger,
                     self.__config.master_url,
                 )
 

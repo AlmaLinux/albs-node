@@ -1,7 +1,6 @@
 FROM almalinux:8
 
-COPY ./buildnode.repo /etc/yum.repos.d/buildnode.repo
-COPY ./codenotary.repo /etc/yum.repos.d/codenotary.repo
+COPY ./buildnode.repo ./codenotary.repo /etc/yum.repos.d/
 RUN dnf install -y epel-release && \
     dnf upgrade -y && \
     dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="buildnode" --enablerepo="codenotary" \

@@ -1,8 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
 import typing
 
-from cas_wrapper import CasWrapper
+from cas_wrapper import CasWrapper, CasArtifact
 import rpm
 
 from build_node.models import Task, Artifact
@@ -17,30 +15,8 @@ def notarize_build_artifacts(
     task: Task,
     build_artifacts: typing.List[Artifact],
     cas_client: CasWrapper,
-    logger: logging.Logger,
     build_host: str,
 ):
-    def notarize_artifacts() -> bool:
-        result = True
-        with cas_client as cas:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {
-                    executor.submit(cas.notarize, artifact.path,
-                                    cas_metadata): artifact
-                    for artifact in build_artifacts
-                    if not artifact.cas_hash
-                }
-                for future in as_completed(futures):
-                    artifact = futures[future]
-                    try:
-                        cas_artifact_hash = future.result()
-                    except Exception:
-                        logger.exception('Cannot notarize artifact:')
-                        result = False
-                        continue
-                    artifact.cas_hash = cas_artifact_hash
-        return result
-
     cas_metadata = {
         'build_id': task.build_id,
         'build_host': build_host,
@@ -78,7 +54,20 @@ def notarize_build_artifacts(
                 'srpm_nevra': srpm_nevra,
             })
 
-    all_artifacts_notarized = notarize_artifacts()
+    artifacts_mapping = {
+        build_artifact.path: CasArtifact(**build_artifact.dict())
+        for build_artifact in build_artifacts
+    }
+    all_artifacts_is_notarized = cas_client.notarize_artifacts(
+        artifacts=artifacts_mapping.values(),
+        metadata=cas_metadata,
+    )
     # ensure that all artifacts notarized
-    while not all_artifacts_notarized:
-        all_artifacts_notarized = notarize_artifacts()
+    while not all_artifacts_is_notarized:
+        all_artifacts_is_notarized = cas_client.notarize_artifacts(
+            artifacts=artifacts_mapping.values(),
+            metadata=cas_metadata,
+        )
+    for artifact in build_artifacts:
+        cas_artifact = artifacts_mapping[artifact.path]
+        artifact.cas_hash = cas_artifact.cas_hash

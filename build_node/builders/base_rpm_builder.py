@@ -112,22 +112,12 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
-                    try:
-                        with self.cas_wrapper as cas:
-                            cas_json = cas.authenticate(
-                                f'git://{git_sources_dir}',
-                                return_json=True,
-                            )
-                            # it should return 0 for authenticated
-                            # and trusted commits
-                            self.task.is_cas_authenticated = not bool(
-                                cas_json.get('status', 1))
-                            self.task.alma_commit_cas_hash = cas_json.get(
-                                'hash')
-                    except ProcessExecutionError:
-                        self.logger.exception('Cannot authenticate %s:',
-                                              git_sources_dir)
-                        self.task.is_cas_authenticated = False
+                    is_authenticated, commit_cas_hash = (
+                        self.cas_wrapper.authenticate_source(
+                            f'git://{git_sources_dir}')
+                    )
+                    self.task.is_cas_authenticated = is_authenticated
+                    self.task.alma_commit_cas_hash = commit_cas_hash
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
