@@ -84,6 +84,7 @@ class BaseRPMBuilder(BaseBuilder):
         super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
                                              artifacts_dir)
         self.cas_wrapper = cas_wrapper
+        self.codenotary_enabled = config.codenotary_enabled
 
     @measure_stage('build_all')
     def build(self):
@@ -112,12 +113,13 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
-                    is_authenticated, commit_cas_hash = (
-                        self.cas_wrapper.authenticate_source(
-                            f'git://{git_sources_dir}')
-                    )
-                    self.task.is_cas_authenticated = is_authenticated
-                    self.task.alma_commit_cas_hash = commit_cas_hash
+                    if self.codenotary_enabled:
+                        is_authenticated, commit_cas_hash = (
+                            self.cas_wrapper.authenticate_source(
+                                f'git://{git_sources_dir}')
+                        )
+                        self.task.is_cas_authenticated = is_authenticated
+                        self.task.alma_commit_cas_hash = commit_cas_hash
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):

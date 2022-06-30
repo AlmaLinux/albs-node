@@ -146,6 +146,10 @@ class BuildNodeConfig(BaseConfig):
                                               schema, **cmd_args)
 
     @property
+    def codenotary_enabled(self) -> bool:
+        return bool(self.cas_api_key) and bool(self.cas_signer_id)
+
+    @property
     def mock_configs_storage_dir(self):
         """
         Mock environments configuration files storage directory.

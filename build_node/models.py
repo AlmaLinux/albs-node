@@ -28,7 +28,7 @@ class TaskCreatedBy(BaseModel):
 
     @property
     def full_name(self):
-        return f'{self.name} {self.email}'
+        return f'{self.name} <{self.email}>'
 
 
 class TaskPlatform(BaseModel):

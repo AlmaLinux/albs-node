@@ -1,10 +1,10 @@
+import time
 import typing
 
-from cas_wrapper import CasWrapper, CasArtifact
-import rpm
+from cas_wrapper import CasWrapper
 
 from build_node.models import Task, Artifact
-
+from build_node.utils.rpm_utils import get_rpm_metadata
 
 __all__ = [
     'notarize_build_artifacts',
@@ -39,13 +39,11 @@ def notarize_build_artifacts(
             if artifact.name.endswith('.src.rpm')
         ), None)
         if srpm:
-            ts = rpm.TransactionSet()
-            with open(srpm.path, 'rb') as rpm_pkg:
-                hdr = ts.hdrFromFdno(rpm_pkg)
-                srpm_nevra = (
-                    f"{hdr['epoch']}:{hdr['name']}-{hdr['version']}-"
-                    f"{hdr['release']}.src"
-                )
+            hdr = get_rpm_metadata(srpm.path)
+            srpm_nevra = (
+                f"{hdr['epoch']}:{hdr['name']}-{hdr['version']}-"
+                f"{hdr['release']}.src"
+            )
             srpm_sha256 = task.srpm_hash if task.srpm_hash else srpm.sha256
             cas_metadata.update({
                 'source_type': 'srpm',
@@ -54,20 +52,25 @@ def notarize_build_artifacts(
                 'srpm_nevra': srpm_nevra,
             })
 
-    artifacts_mapping = {
-        build_artifact.path: CasArtifact(**build_artifact.dict())
-        for build_artifact in build_artifacts
-    }
-    all_artifacts_is_notarized = cas_client.notarize_artifacts(
-        artifacts=artifacts_mapping.values(),
+    notarized_artifacts = {}
+    artifact_paths = [artifact.path for artifact in build_artifacts]
+    all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
+        artifact_paths=artifact_paths,
         metadata=cas_metadata,
     )
+    notarized_artifacts.update(artifacts)
     # ensure that all artifacts notarized
     while not all_artifacts_is_notarized:
-        all_artifacts_is_notarized = cas_client.notarize_artifacts(
-            artifacts=artifacts_mapping.values(),
+        artifact_paths = [
+            artifact.path
+            for artifact in build_artifacts
+            if artifact.path not in notarized_artifacts
+        ]
+        all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
+            artifact_paths=artifact_paths,
             metadata=cas_metadata,
         )
+        notarized_artifacts.update(artifacts)
+        time.sleep(5)
     for artifact in build_artifacts:
-        cas_artifact = artifacts_mapping[artifact.path]
-        artifact.cas_hash = cas_artifact.cas_hash
+        artifact.cas_hash = notarized_artifacts[artifact.path]

@@ -26,6 +26,26 @@ __all__ = ['srpm_cpio_sha256sum', 'unpack_src_rpm', 'compare_rpm_packages',
            'to_str_fixing_len', 'split_segments', 'int_to', 'char_to']
 
 
+def get_rpm_metadata(rpm_path: str):
+    """
+    Returns RPM metadata.
+
+    Parameters
+    ----------
+    rpm_path : str
+        RPM path.
+
+    Returns
+    -------
+    dict
+        RPM metadata.
+    """
+    ts = rpm.TransactionSet()
+    with open(rpm_path, 'rb') as rpm_pkg:
+        hdr = ts.hdrFromFdno(rpm_pkg)
+    return hdr
+
+
 def srpm_cpio_sha256sum(srpm_path):
     """
     Returns SHA256 of src-RPM cpio archive.
