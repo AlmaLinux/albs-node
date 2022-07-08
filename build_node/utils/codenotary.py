@@ -1,4 +1,3 @@
-import time
 import typing
 
 from cas_wrapper import CasWrapper
@@ -54,23 +53,10 @@ def notarize_build_artifacts(
 
     notarized_artifacts = {}
     artifact_paths = [artifact.path for artifact in build_artifacts]
-    all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
+    _, artifacts = cas_client.notarize_artifacts(
         artifact_paths=artifact_paths,
         metadata=cas_metadata,
     )
     notarized_artifacts.update(artifacts)
-    # ensure that all artifacts notarized
-    while not all_artifacts_is_notarized:
-        artifact_paths = [
-            artifact.path
-            for artifact in build_artifacts
-            if artifact.path not in notarized_artifacts
-        ]
-        all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
-            artifact_paths=artifact_paths,
-            metadata=cas_metadata,
-        )
-        notarized_artifacts.update(artifacts)
-        time.sleep(5)
     for artifact in build_artifacts:
         artifact.cas_hash = notarized_artifacts[artifact.path]
