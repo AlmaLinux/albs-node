@@ -59,4 +59,4 @@ def notarize_build_artifacts(
     )
     notarized_artifacts.update(artifacts)
     for artifact in build_artifacts:
-        artifact.cas_hash = notarized_artifacts[artifact.path]
+        artifact.cas_hash = notarized_artifacts.get(artifact.path)
