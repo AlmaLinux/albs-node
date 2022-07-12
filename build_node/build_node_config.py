@@ -135,6 +135,8 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True},
+            'cas_api_key': {'type': 'string', 'nullable': True},
+            'cas_signer_id': {'type': 'string', 'nullable': True},
             'base_arch': {'type': 'string', 'nullable': False},
             'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
                              'required': True},
@@ -142,6 +144,10 @@ class BuildNodeConfig(BaseConfig):
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)
+
+    @property
+    def codenotary_enabled(self) -> bool:
+        return bool(self.cas_api_key) and bool(self.cas_signer_id)
 
     @property
     def mock_configs_storage_dir(self):

@@ -40,7 +40,7 @@ __all__ = ['DebianBuilder', 'DebianARMHFBuilder']
 
 class DebianBuilder(BaseBuilder):
 
-    def __init__(self, config, logger, task, task_dir, artifacts_dir):
+    def __init__(self, config, logger, task, task_dir, artifacts_dir, cas_wrapper):
         """
         Debian builder initialization.
 
@@ -60,6 +60,7 @@ class DebianBuilder(BaseBuilder):
         chown_recursive(task_dir)
         super(DebianBuilder, self).__init__(config, logger, task, task_dir,
                                             artifacts_dir)
+        self._cas_wrapper = cas_wrapper
         self.__config_keys = ('components', 'debootstrapopts', 'distribution',
                               'mirrorsite', 'othermirror')
 

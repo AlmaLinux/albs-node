@@ -346,6 +346,7 @@ class BaseBuilder(object):
         """
         try:
             commit_id = git_get_commit_id(git_sources_dir)
+            self.task.ref.git_commit_hash = commit_id
             self.logger.info('git commit id: {0}'.format(commit_id))
         except Exception as e:
             msg = 'can not get git commit id: {0}. Traceback:\n{1}'
