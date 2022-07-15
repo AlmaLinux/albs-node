@@ -62,9 +62,8 @@ def notarize_build_artifacts(
 
     # sometimes we cannot notarize artifacts because of network problems
     max_notarized_retries = 5
-    while max_notarized_retries:
-        if all_artifacts_is_notarized:
-            break
+    while not all_artifacts_is_notarized and max_notarized_retries:
+        time.sleep(10)
         artifact_paths = [
             artifact.path for artifact in build_artifacts
             if artifact.path not in notarized_artifacts
@@ -75,7 +74,6 @@ def notarize_build_artifacts(
         )
         notarized_artifacts.update(artifacts)
         max_notarized_retries -= 1
-        time.sleep(10)
 
     for artifact in build_artifacts:
         artifact.cas_hash = notarized_artifacts.get(artifact.path)
