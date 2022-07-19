@@ -3,7 +3,8 @@ import typing
 
 from cas_wrapper import CasWrapper
 
-from build_node.models import Task, Artifact
+from build_node.models import Task
+from build_node.utils.file_utils import filter_files, hash_file
 from build_node.utils.rpm_utils import get_rpm_metadata
 
 __all__ = [
@@ -13,10 +14,21 @@ __all__ = [
 
 def notarize_build_artifacts(
     task: Task,
-    build_artifacts: typing.List[Artifact],
+    artifacts_dir: str,
     cas_client: CasWrapper,
     build_host: str,
-):
+) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+
+    srpm_path = None
+    artifact_paths = []
+    for artifact_path in filter_files(
+        artifacts_dir,
+        lambda x: any((x.endswith(type) for type in ('.log', '.cfg', '.rpm'))),
+    ):
+        if artifact_path.endswith('.src.rpm'):
+            srpm_path = artifact_path
+        artifact_paths.append(artifact_path)
+
     cas_metadata = {
         'build_id': task.build_id,
         'build_host': build_host,
@@ -34,17 +46,16 @@ def notarize_build_artifacts(
             'git_commit': task.ref.git_commit_hash,
         })
     else:
-        srpm = next((
-            artifact for artifact in build_artifacts
-            if artifact.name.endswith('.src.rpm')
-        ), None)
-        if srpm:
-            hdr = get_rpm_metadata(srpm.path)
+        if srpm_path:
+            hdr = get_rpm_metadata(srpm_path)
             srpm_nevra = (
                 f"{hdr['epoch']}:{hdr['name']}-{hdr['version']}-"
                 f"{hdr['release']}.src"
             )
-            srpm_sha256 = task.srpm_hash if task.srpm_hash else srpm.sha256
+            if task.srpm_hash:
+                srpm_sha256 = task.srpm_hash
+            else:
+                srpm_sha256 = hash_file(srpm_path, hash_type='sha256')
             cas_metadata.update({
                 'source_type': 'srpm',
                 'srpm_url': task.ref.url,
@@ -53,7 +64,6 @@ def notarize_build_artifacts(
             })
 
     notarized_artifacts = {}
-    artifact_paths = [artifact.path for artifact in build_artifacts]
     all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
         artifact_paths=artifact_paths,
         metadata=cas_metadata,
@@ -61,19 +71,21 @@ def notarize_build_artifacts(
     notarized_artifacts.update(artifacts)
 
     # sometimes we cannot notarize artifacts because of network problems
-    max_notarized_retries = 5
-    while not all_artifacts_is_notarized and max_notarized_retries:
+    max_notarize_retries = 5
+    while not all_artifacts_is_notarized and max_notarize_retries:
         time.sleep(10)
-        artifact_paths = [
-            artifact.path for artifact in build_artifacts
-            if artifact.path not in notarized_artifacts
-        ]
         all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
-            artifact_paths=artifact_paths,
+            artifact_paths=[
+                path for path in artifact_paths
+                if path not in notarized_artifacts
+            ],
             metadata=cas_metadata,
         )
         notarized_artifacts.update(artifacts)
-        max_notarized_retries -= 1
+        max_notarize_retries -= 1
+    non_notarized_artifacts = [
+        path for path in artifact_paths
+        if path not in notarized_artifacts
+    ]
 
-    for artifact in build_artifacts:
-        artifact.cas_hash = notarized_artifacts.get(artifact.path)
+    return notarized_artifacts, non_notarized_artifacts

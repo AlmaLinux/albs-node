@@ -133,6 +133,24 @@ class BuildNodeBuilder(threading.Thread):
             finally:
                 only_logs = (not (bool(filter_files(
                     artifacts_dir, lambda f: f.endswith('.rpm')))))
+                notarized_artifacts = {}
+                if self._codenotary_enabled:
+                    (
+                        notarized_artifacts,
+                        non_notarized_artifacts,
+                    ) = notarize_build_artifacts(
+                        task,
+                        artifacts_dir,
+                        self._cas_wrapper,
+                        self.__config.master_url,
+                    )
+                    if non_notarized_artifacts:
+                        only_logs = True
+                        success = False
+                        self.__logger.error(
+                            'Cannot notarize following artifacts:\n%s',
+                            '\n'.join(non_notarized_artifacts),
+                        )
                 try:
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, task_log_file, only_logs=only_logs)
@@ -140,13 +158,8 @@ class BuildNodeBuilder(threading.Thread):
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
 
-                if self._codenotary_enabled:
-                    notarize_build_artifacts(
-                        task,
-                        build_artifacts,
-                        self._cas_wrapper,
-                        self.__config.master_url,
-                    )
+                for artifact in build_artifacts:
+                    artifact.cas_hash = notarized_artifacts.get(artifact.path)
 
                 try:
                     if not success and excluded:
