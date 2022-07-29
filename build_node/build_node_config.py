@@ -109,6 +109,8 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
             'base_arch': DEFAULT_BASE_ARCH,
+            'cas_api_key': None,
+            'cas_signer_id': None,
             'request_timeout': DEFAULT_REQUEST_TIMEOUT
         }
         schema = {
