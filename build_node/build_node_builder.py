@@ -157,6 +157,7 @@ class BuildNodeBuilder(threading.Thread):
                 except Exception:
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
+                    success = False
 
                 for artifact in build_artifacts:
                     artifact.cas_hash = notarized_artifacts.get(artifact.path)
