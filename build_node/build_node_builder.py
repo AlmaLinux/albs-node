@@ -12,6 +12,7 @@ import os
 import time
 import urllib.parse
 import platform
+import pprint
 import random
 import threading
 import typing
@@ -79,6 +80,7 @@ class BuildNodeBuilder(threading.Thread):
 
         self.__terminated_event = terminated_event
         self.__graceful_terminated_event = graceful_terminated_event
+        self.__hostname = platform.node()
 
     def run(self):
         log_file = os.path.join(self.__working_dir,
@@ -142,8 +144,12 @@ class BuildNodeBuilder(threading.Thread):
                         task,
                         artifacts_dir,
                         self._cas_wrapper,
-                        self.__config.master_url,
+                        self.__hostname,
                     )
+                    self.__logger.debug(
+                        'List of notarized and not notarized artifacts:')
+                    self.__logger.debug(pprint.pformat(notarized_artifacts))
+                    self.__logger.debug(pprint.pformat(non_notarized_artifacts))
                     if non_notarized_artifacts:
                         only_logs = True
                         success = False
