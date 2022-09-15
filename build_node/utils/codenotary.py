@@ -67,7 +67,8 @@ def notarize_build_artifacts(
     max_notarize_retries = 5
     to_notarize = artifact_paths
     non_notarized_artifacts = artifact_paths
-    rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch')
+    rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
+                         'sourcerpm')
 
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
