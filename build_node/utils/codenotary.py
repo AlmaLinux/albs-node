@@ -34,7 +34,7 @@ def notarize_build_artifacts(
         'build_host': build_host,
         'build_arch': task.arch,
         'built_by': task.created_by.full_name,
-        'sbom_api': '0.1',
+        'sbom_api': '0.2',
     }
     if task.is_alma_source() and task.alma_commit_cas_hash:
         cas_metadata['alma_commit_sbom_hash'] = task.alma_commit_cas_hash
@@ -64,28 +64,34 @@ def notarize_build_artifacts(
             })
 
     notarized_artifacts = {}
-    all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
-        artifact_paths=artifact_paths,
-        metadata=cas_metadata,
-    )
-    notarized_artifacts.update(artifacts)
-
-    # sometimes we cannot notarize artifacts because of network problems
     max_notarize_retries = 5
-    while not all_artifacts_is_notarized and max_notarize_retries:
-        time.sleep(10)
-        all_artifacts_is_notarized, artifacts = cas_client.notarize_artifacts(
-            artifact_paths=[
-                path for path in artifact_paths
-                if path not in notarized_artifacts
-            ],
-            metadata=cas_metadata,
-        )
-        notarized_artifacts.update(artifacts)
-        max_notarize_retries -= 1
-    non_notarized_artifacts = [
-        path for path in artifact_paths
-        if path not in notarized_artifacts
-    ]
+    to_notarize = artifact_paths
+    non_notarized_artifacts = artifact_paths
+    rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
+                         'sourcerpm')
+
+    while non_notarized_artifacts and max_notarize_retries:
+        non_notarized_artifacts = []
+        for artifact in to_notarize:
+            if artifact.endswith('.rpm'):
+                artifact_metadata = cas_metadata.copy()
+                rpm_header = get_rpm_metadata(artifact)
+                for field in rpm_header_fields:
+                    artifact_metadata[field] = rpm_header[field]
+                notarized, cas_hash = cas_client.notarize_no_exc(
+                    artifact, metadata=artifact_metadata)
+            else:
+                notarized, cas_hash = cas_client.notarize_no_exc(
+                    artifact, metadata=cas_metadata)
+
+            if not notarized:
+                non_notarized_artifacts.append(artifact)
+            else:
+                notarized_artifacts[artifact] = cas_hash
+
+        if non_notarized_artifacts:
+            to_notarize = non_notarized_artifacts
+            max_notarize_retries -= 1
+            time.sleep(10)
 
     return notarized_artifacts, non_notarized_artifacts
