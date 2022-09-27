@@ -1,10 +1,11 @@
+import os.path
 import time
 import typing
 
 from cas_wrapper import CasWrapper
 
 from build_node.models import Task
-from build_node.utils.file_utils import filter_files, hash_file
+from build_node.utils.file_utils import filter_files, hash_file, download_file
 from build_node.utils.rpm_utils import get_rpm_metadata
 
 __all__ = [
@@ -46,10 +47,17 @@ def notarize_build_artifacts(
             'git_commit': task.ref.git_commit_hash,
         })
     else:
+        srpm_filename = 'initial.src.rpm'
+        try:
+            srpm_path = download_file(
+                task.ref.url, os.path.join(artifacts_dir, srpm_filename))
+        except:
+            pass
         if srpm_path:
             hdr = get_rpm_metadata(srpm_path)
+            epoch = hdr['epoch'] if hdr['epoch'] else '0'
             srpm_nevra = (
-                f"{hdr['epoch']}:{hdr['name']}-{hdr['version']}-"
+                f"{epoch}:{hdr['name']}-{hdr['version']}-"
                 f"{hdr['release']}.src"
             )
             if task.srpm_hash:
@@ -62,6 +70,7 @@ def notarize_build_artifacts(
                 'srpm_sha256': srpm_sha256,
                 'srpm_nevra': srpm_nevra,
             })
+            os.remove(srpm_path)
 
     notarized_artifacts = {}
     max_notarize_retries = 5
@@ -70,6 +79,7 @@ def notarize_build_artifacts(
     rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
                          'sourcerpm')
 
+    cas_client.ensure_login()
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
         for artifact in to_notarize:
