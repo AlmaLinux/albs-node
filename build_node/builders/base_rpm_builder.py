@@ -397,6 +397,8 @@ class BaseRPMBuilder(BaseBuilder):
         """
         yum_repos = []
         for repo in task.repositories:
+            if not repo.mock_enabled:
+                continue
             repo_kwargs = {}
             if re.search(r'AlmaLinux-\d-.*-\d+-br', repo.url):
                 repo_kwargs['module_hotfixes'] = True

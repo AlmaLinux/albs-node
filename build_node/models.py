@@ -11,6 +11,7 @@ class TaskRepo(BaseModel):
     name: str
     url: str
     priority: int
+    mock_enabled: bool
 
 
 class TaskRef(BaseModel):
