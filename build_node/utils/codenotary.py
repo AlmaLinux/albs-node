@@ -79,7 +79,11 @@ def notarize_build_artifacts(
     rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
                          'sourcerpm')
 
-    cas_client.ensure_login()
+    try:
+        cas_client.ensure_login()
+    except Exception:
+        return notarized_artifacts, non_notarized_artifacts
+
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
         for artifact in to_notarize:
