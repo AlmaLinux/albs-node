@@ -42,6 +42,7 @@ def get_rpm_metadata(rpm_path: str):
         RPM metadata.
     """
     ts = rpm.TransactionSet()
+    ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
     with open(rpm_path, 'rb') as rpm_pkg:
         hdr = ts.hdrFromFdno(rpm_pkg)
     return hdr
