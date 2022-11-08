@@ -171,6 +171,9 @@ class MockConfig(object):
     def append_config_opt(self, key: str, value: str):
         self.__append_config_opts[key].append(value)
 
+    def set_config_opts(self, opts_dict: dict):
+        self.__config_opts.update(opts_dict)
+
     def add_module_install(self, module_name):
         """
         Adds a module to module_install configuration.
@@ -340,7 +343,7 @@ class MockConfig(object):
             out += 'config_opts[{0}] = {1}\n'.\
                 format(option, to_mock_config_string(value))
         # it is needed til we use EL7 Build Server
-        out = out.replace('config_opts["use_bootstrap_container"] = True', 
+        out = out.replace('config_opts["use_bootstrap_container"] = True',
                 'config_opts["use_bootstrap_container"] = False')
         return out
 
