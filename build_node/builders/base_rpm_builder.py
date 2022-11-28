@@ -414,13 +414,17 @@ class BaseRPMBuilder(BaseBuilder):
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
-        mock_config_kwargs = {'use_bootstrap_container': False}
+        mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
         target_arch = task.arch
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value
-            elif not task.is_secure_boot and key == 'macros':
-                continue
+            elif key == 'macros':
+                mock_config_kwargs['macros'].update(value)
+            elif key == 'secure_boot_macros':
+                if not task.is_secure_boot:
+                    continue
+                mock_config_kwargs['macros'].update(value)
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
