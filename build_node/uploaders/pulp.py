@@ -35,7 +35,8 @@ class PulpBaseUploader(BaseUploader):
     """
 
     def __init__(self, host: str, username: str, password: str,
-                 chunk_size: int, requests_timeout: int = DEFAULT_TIMEOUT):
+                 chunk_size: int, max_workers: int,
+                 requests_timeout: int = DEFAULT_TIMEOUT):
         """
         Initiate uploader.
 
@@ -49,6 +50,8 @@ class PulpBaseUploader(BaseUploader):
             User password.
         chunk_size : int
             Size of chunk to split files during the upload.
+        max_workers: int
+            Maximum number of parallel workers when uploading content.
         """
         api_client = self._prepare_api_client(host, username, password)
         self._uploads_client = UploadsApi(api_client=api_client)
@@ -56,6 +59,7 @@ class PulpBaseUploader(BaseUploader):
         self._artifacts_client = ArtifactsApi(api_client=api_client)
         self._file_splitter = Filesplit()
         self._chunk_size = chunk_size
+        self._max_workers = max_workers
         self._requests_timeout = requests_timeout
         self._logger = logging.getLogger(__file__)
 
@@ -306,7 +310,7 @@ class PulpRpmUploader(PulpBaseUploader):
         success_uploads = []
         errored_uploads = []
         self._logger.info('Starting files upload')
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
                 executor.submit(self.upload_single_file, artifact): artifact
                 for artifact in self.get_artifacts_list(

@@ -75,7 +75,8 @@ class BuildNodeBuilder(threading.Thread):
         self._codenotary_enabled = self.__config.codenotary_enabled
         self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
-            self.__config.pulp_password, self.__config.pulp_chunk_size
+            self.__config.pulp_password, self.__config.pulp_chunk_size,
+            self.__config.pulp_uploader_max_workers
         )
 
         self.__terminated_event = terminated_event
