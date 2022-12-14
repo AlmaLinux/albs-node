@@ -310,7 +310,7 @@ class PulpRpmUploader(PulpBaseUploader):
         success_uploads = []
         errored_uploads = []
         self._logger.info('Starting files upload')
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {
                 executor.submit(self.upload_single_file, artifact): artifact
                 for artifact in self.get_artifacts_list(

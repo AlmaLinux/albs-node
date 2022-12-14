@@ -430,7 +430,8 @@ class BaseRPMBuilder(BaseBuilder):
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'),
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
+            yum_config=yum_config, target_arch=target_arch,
+            basedir=config.mock_basedir, **mock_config_kwargs
         )
         if task.is_secure_boot:
             mock_config.set_config_opts({'isolation': 'simple'})

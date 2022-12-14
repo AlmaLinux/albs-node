@@ -25,6 +25,7 @@ DEFAULT_PULP_USER = 'pulp'
 DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
+DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
 DEFAULT_S3_REGION = ''
@@ -108,6 +109,7 @@ class BuildNodeConfig(BaseConfig):
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
             'pulp_uploader_max_workers': DEFAULT_PULP_UPLOADER_MAX_WORKERS,
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
+            'mock_basedir': DEFAULT_MOCK_BASEDIR,
             's3_region': DEFAULT_S3_REGION,
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
@@ -137,6 +139,7 @@ class BuildNodeConfig(BaseConfig):
             'pulp_password': {'type': 'string', 'nullable': False},
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
             'pulp_uploader_max_workers': {'type': 'integer', 'nullable': False},
+            'mock_basedir': {'type': 'string', 'nullable': True},
             's3_bucket': {'type': 'string', 'nullable': False},
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
