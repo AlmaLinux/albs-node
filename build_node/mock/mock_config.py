@@ -107,7 +107,7 @@ class MockConfig(object):
 
     def __init__(self, target_arch, legal_host_arches=None,
                  chroot_setup_cmd='install @buildsys-build', dist=None,
-                 releasever=None, files=None, yum_config=None, **kwargs):
+                 releasever=None, files=None, yum_config=None, basedir=None, **kwargs):
         """
         Mock configuration initialization.
 
@@ -133,6 +133,8 @@ class MockConfig(object):
             List of chroot files (config_opts['files']).
         yum_config : build_node.mock.yum_config.YumConfig
             Yum configuration.
+        basedir : str, optional
+            Mock basedir if want to override the default one (/var/lib/mock/).
 
         Raises
         ------
@@ -158,7 +160,8 @@ class MockConfig(object):
         self.__config_opts = {'target_arch': target_arch,
                               'legal_host_arches': legal_host_arches,
                               'chroot_setup_cmd': chroot_setup_cmd,
-                              'dist': dist, 'releasever': releasever}
+                              'dist': dist, 'releasever': releasever,
+                              'basedir': basedir}
         self.__config_opts.update(**kwargs)
         self.__append_config_opts = collections.defaultdict(list)
         self.__files = {}

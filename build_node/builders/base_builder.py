@@ -300,7 +300,8 @@ class BaseBuilder(object):
                                  rpmbuild_networking=True,
                                  use_host_resolv=True,
                                  yum_config=yum_config,
-                                 package_manager='yum')  # exactly yum, not dnf
+                                 package_manager='yum',  # exactly yum, not dnf
+                                 basedir=self.config.mock_basedir)
         bind_plugin = MockBindMountPluginConfig(True, [(git_sources_dir,
                                                         '/srv/pre_build/')])
         mock_config.add_plugin(bind_plugin)
