@@ -14,7 +14,9 @@ DEFAULT_BASE_ARCH = 'x86_64'
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
-DEFAULT_SENTRY_DSN = None
+DEFAULT_SENTRY_DSN = ''
+DEFAULT_SENTRY_ENVIRONMENT = 'dev'
+DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_NATIVE_BUILDING = True
 DEFAULT_ARM64_BUILDING = False
 DEFAULT_ARM32_BUILDING = False
@@ -103,6 +105,8 @@ class BuildNodeConfig(BaseConfig):
             'pesign_support': DEFAULT_PESIGN_SUPPORT,
             'node_type': DEFAULT_NODE_TYPE,
             'sentry_dsn': DEFAULT_SENTRY_DSN,
+            'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
+            'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
             'pulp_host': DEFAULT_PULP_HOST,
             'pulp_user': DEFAULT_PULP_USER,
             'pulp_password': DEFAULT_PULP_PASSWORD,
@@ -134,6 +138,8 @@ class BuildNodeConfig(BaseConfig):
             'pesign_support': {'type': 'boolean', 'default': False},
             'node_type': {'type': 'string', 'nullable': True},
             'sentry_dsn': {'type': 'string', 'nullable': True},
+            'sentry_environment': {'type': 'string', 'nullable': True},
+            'sentry_traces_sample_rate': {'type': 'float', 'nullable': True},
             'pulp_host': {'type': 'string', 'nullable': False},
             'pulp_user': {'type': 'string', 'nullable': False},
             'pulp_password': {'type': 'string', 'nullable': False},

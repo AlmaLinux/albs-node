@@ -7,7 +7,7 @@ validators==0.18.2
 python-debian==0.1.40
 configparser==5.0.2
 requests==2.26.0
-raven==6.10.0
+sentry-sdk==1.12.1
 GitPython==2.1.10
 gitdb2==2.0.6
 pygments==2.10.0
