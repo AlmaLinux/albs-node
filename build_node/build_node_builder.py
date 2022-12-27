@@ -22,6 +22,7 @@ import yaml
 import requests
 import requests.adapters
 from requests.packages.urllib3.util.retry import Retry
+from sentry_sdk import capture_exception
 
 from build_node import constants
 from build_node.builders import get_suitable_builder
@@ -34,7 +35,6 @@ from build_node.utils.file_utils import (
 )
 from build_node.models import Task
 from build_node.utils.codenotary import notarize_build_artifacts
-from build_node.utils.sentry_utils import Sentry
 
 
 class BuildNodeBuilder(threading.Thread):
@@ -67,7 +67,6 @@ class BuildNodeBuilder(threading.Thread):
         self.__current_task_id = None
         # current task processing start timestamp
         self.__start_ts = None
-        self.__sentry = Sentry(config.sentry_dsn)
         # current task builder object
         self.__builder = None
         self.__session = None
@@ -132,7 +131,7 @@ class BuildNodeBuilder(threading.Thread):
                     'task %i build failed',
                     task.id,
                 )
-                self.__sentry.capture_exception(e)
+                capture_exception(e)
             finally:
                 only_logs = (not (bool(filter_files(
                     artifacts_dir, lambda f: f.endswith('.rpm')))))

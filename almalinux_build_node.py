@@ -15,6 +15,8 @@ import sys
 import time
 from threading import Event
 
+import sentry_sdk
+
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
@@ -85,6 +87,23 @@ def init_working_dir(config):
         os.makedirs(config.mock_configs_storage_dir, 0o750)
 
 
+def init_sentry(config):
+    """
+    Initializes Sentry if dsn parameter is provided.
+
+    Parameters
+    ----------
+    config : BuildNodeConfig
+    """
+    if not config.sentry_dsn:
+        return
+    sentry_sdk.init(
+        dsn=config.sentry_dsn,
+        traces_sample_rate=config.sentry_traces_sample_rate,
+        environment=config.sentry_environment,
+    )
+
+
 def main(sys_args):
     args_parser = init_args_parser()
     args = args_parser.parse_args(sys_args)
@@ -97,6 +116,7 @@ def main(sys_args):
         return 2
     configure_logger(args.verbose)
     init_working_dir(config)
+    init_sentry(config)
 
     node_terminated = Event()
     node_graceful_terminated = Event()
