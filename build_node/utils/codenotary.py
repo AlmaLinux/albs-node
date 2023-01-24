@@ -35,7 +35,7 @@ def notarize_build_artifacts(
         'build_host': build_host,
         'build_arch': task.arch,
         'built_by': task.created_by.full_name,
-        'sbom_api': '0.2',
+        'sbom_api_ver': '0.2',
     }
     if task.is_alma_source() and task.alma_commit_cas_hash:
         cas_metadata['alma_commit_sbom_hash'] = task.alma_commit_cas_hash
