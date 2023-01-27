@@ -159,11 +159,15 @@ class BuildNodeBuilder(threading.Thread):
                         )
                 try:
                     build_artifacts = self.__upload_artifacts(
-                        artifacts_dir, task_log_file, only_logs=only_logs)
+                        artifacts_dir, only_logs=only_logs)
                 except Exception:
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
                     success = False
+                finally:
+                    build_artifacts.append(
+                        self._pulp_uploader.upload_single_file(task_log_file)
+                    )
 
                 for artifact in build_artifacts:
                     artifact.cas_hash = notarized_artifacts.get(artifact.path)
@@ -213,7 +217,7 @@ class BuildNodeBuilder(threading.Thread):
                                        self._cas_wrapper)
         self.__builder.build()
 
-    def __upload_artifacts(self, artifacts_dir, task_log_file,
+    def __upload_artifacts(self, artifacts_dir,
                            only_logs: bool = False):
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
@@ -225,9 +229,6 @@ class BuildNodeBuilder(threading.Thread):
             fd.write(yaml.dump(build_stats))
         artifacts.append(
             self._pulp_uploader.upload_single_file(build_stats_path)
-        )
-        artifacts.append(
-            self._pulp_uploader.upload_single_file(task_log_file)
         )
         return artifacts
 
