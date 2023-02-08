@@ -157,6 +157,7 @@ class BuildNodeBuilder(threading.Thread):
                             'Cannot notarize following artifacts:\n%s',
                             '\n'.join(non_notarized_artifacts),
                         )
+                build_artifacts = []
                 try:
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, only_logs=only_logs)

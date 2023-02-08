@@ -291,7 +291,6 @@ class PulpRpmUploader(PulpBaseUploader):
                 with open(file_, 'rb') as file:
                     content = file.read()
                 with open(file_, 'wb') as file:
-                    self._logger.info(content)
                     compressed_content = gzip.compress(content)
                     file.write(compressed_content)
                 artifacts.append(file_)
