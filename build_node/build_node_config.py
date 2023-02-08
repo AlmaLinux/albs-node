@@ -14,7 +14,9 @@ DEFAULT_BASE_ARCH = 'x86_64'
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
-DEFAULT_SENTRY_DSN = None
+DEFAULT_SENTRY_DSN = ''
+DEFAULT_SENTRY_ENVIRONMENT = 'dev'
+DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_NATIVE_BUILDING = True
 DEFAULT_ARM64_BUILDING = False
 DEFAULT_ARM32_BUILDING = False
@@ -24,6 +26,8 @@ DEFAULT_PULP_HOST = 'http://pulp'
 DEFAULT_PULP_USER = 'pulp'
 DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
+DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
+DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
 DEFAULT_S3_REGION = ''
@@ -69,6 +73,8 @@ class BuildNodeConfig(BaseConfig):
         Pulp password.
     pulp_chunk_size : int
         Size of file chunk to upload through Pulp.
+    pulp_uploader_max_workers : int
+        Maximum number of parallel workers when uploading content to Pulp.
     """
 
     def __init__(self, config_file=None, **cmd_args):
@@ -99,16 +105,22 @@ class BuildNodeConfig(BaseConfig):
             'pesign_support': DEFAULT_PESIGN_SUPPORT,
             'node_type': DEFAULT_NODE_TYPE,
             'sentry_dsn': DEFAULT_SENTRY_DSN,
+            'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
+            'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
             'pulp_host': DEFAULT_PULP_HOST,
             'pulp_user': DEFAULT_PULP_USER,
             'pulp_password': DEFAULT_PULP_PASSWORD,
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
+            'pulp_uploader_max_workers': DEFAULT_PULP_UPLOADER_MAX_WORKERS,
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
+            'mock_basedir': DEFAULT_MOCK_BASEDIR,
             's3_region': DEFAULT_S3_REGION,
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
             'base_arch': DEFAULT_BASE_ARCH,
+            'cas_api_key': None,
+            'cas_signer_id': None,
             'request_timeout': DEFAULT_REQUEST_TIMEOUT
         }
         schema = {
@@ -126,15 +138,21 @@ class BuildNodeConfig(BaseConfig):
             'pesign_support': {'type': 'boolean', 'default': False},
             'node_type': {'type': 'string', 'nullable': True},
             'sentry_dsn': {'type': 'string', 'nullable': True},
+            'sentry_environment': {'type': 'string', 'nullable': True},
+            'sentry_traces_sample_rate': {'type': 'float', 'nullable': True},
             'pulp_host': {'type': 'string', 'nullable': False},
             'pulp_user': {'type': 'string', 'nullable': False},
             'pulp_password': {'type': 'string', 'nullable': False},
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
+            'pulp_uploader_max_workers': {'type': 'integer', 'nullable': False},
+            'mock_basedir': {'type': 'string', 'nullable': True},
             's3_bucket': {'type': 'string', 'nullable': False},
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True},
+            'cas_api_key': {'type': 'string', 'nullable': True},
+            'cas_signer_id': {'type': 'string', 'nullable': True},
             'base_arch': {'type': 'string', 'nullable': False},
             'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
                              'required': True},
@@ -142,6 +160,10 @@ class BuildNodeConfig(BaseConfig):
         }
         super(BuildNodeConfig, self).__init__(default_config, config_file,
                                               schema, **cmd_args)
+
+    @property
+    def codenotary_enabled(self) -> bool:
+        return bool(self.cas_api_key) and bool(self.cas_signer_id)
 
     @property
     def mock_configs_storage_dir(self):

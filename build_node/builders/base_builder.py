@@ -69,7 +69,7 @@ class BaseBuilder(object):
             Build node configuration object.
         logger : logging.Logger
             Current build thread logger.
-        task : dict
+        task : Task
             Build task.
         task_dir : str
             Build task working directory.
@@ -94,7 +94,7 @@ class BaseBuilder(object):
         ----------
         git_sources_dir : str
             Target directory path.
-        ref : str
+        ref : TaskRef
             Git (gerrit) reference.
 
         Returns
@@ -248,20 +248,23 @@ class BaseBuilder(object):
             yum_repos = [
                 YumRepositoryConfig(repositoryid='centos7-os', name='centos7-os',
                                     baseurl='http://mirror.centos.org/'
-                                            'altarch/7/os/$basearch/'),
+                                            'altarch/7/os/$basearch/',
+                                    priority='10'),
                 YumRepositoryConfig(repositoryid='centos7-updates',
                                     name='centos7-updates',
                                     baseurl='http://mirror.centos.org/altarch/7'
-                                            '/updates/$basearch/')
+                                            '/updates/$basearch/', priority='10')
             ]
         else:
             yum_repos = [
                 YumRepositoryConfig(repositoryid='cl7-os', name='cl7-os',
                                     baseurl='http://koji.cloudlinux.com/'
-                                            'cloudlinux/7/os/x86_64/'),
+                                            'cloudlinux/7/os/x86_64/',
+                                    priority='10'),
                 YumRepositoryConfig(repositoryid='cl7-updates', name='cl7-updates',
                                     baseurl='http://koji.cloudlinux.com/'
-                                            'cloudlinux/7/updates/x86_64/')
+                                            'cloudlinux/7/updates/x86_64/',
+                                    priority='10')
             ]
         return YumConfig(repositories=yum_repos)
 
@@ -294,11 +297,11 @@ class BaseBuilder(object):
         mock_config = MockConfig(target_arch=target_arch, dist='el7',
                                  chroot_setup_cmd=chroot_setup_cmd,
                                  use_boostrap_container=False,
-                                 use_nspawn=False,
                                  rpmbuild_networking=True,
                                  use_host_resolv=True,
                                  yum_config=yum_config,
-                                 package_manager='yum')  # exactly yum, not dnf
+                                 package_manager='yum',  # exactly yum, not dnf
+                                 basedir=self.config.mock_basedir)
         bind_plugin = MockBindMountPluginConfig(True, [(git_sources_dir,
                                                         '/srv/pre_build/')])
         mock_config.add_plugin(bind_plugin)
@@ -331,7 +334,7 @@ class BaseBuilder(object):
         if not os.path.exists(config_path):
             return []
         with open(config_path, 'r') as fd:
-            return yaml.load(fd).get('dependencies', [])
+            return yaml.Loader(fd).get_data().get('dependencies', [])
 
     def __log_commit_id(self, git_sources_dir):
         """
@@ -344,6 +347,7 @@ class BaseBuilder(object):
         """
         try:
             commit_id = git_get_commit_id(git_sources_dir)
+            self.task.ref.git_commit_hash = commit_id
             self.logger.info('git commit id: {0}'.format(commit_id))
         except Exception as e:
             msg = 'can not get git commit id: {0}. Traceback:\n{1}'

@@ -858,7 +858,8 @@ class MirroredGitRepo(object):
         cmd.extend((repo_url, target_dir))
         git_clone = subprocess.Popen(cmd, cwd=self.__base_dir,
                                      stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT)
+                                     stderr=subprocess.STDOUT,
+                                     env={'GIT_TERMINAL_PROMPT': '0'})
         stdout, _ = git_clone.communicate()
         status = git_clone.returncode
         if status != 0:

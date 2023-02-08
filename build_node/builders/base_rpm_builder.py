@@ -18,6 +18,7 @@ from distutils.dir_util import copy_tree
 
 import validators
 import rpm
+from plumbum.commands.processes import ProcessExecutionError
 
 from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
@@ -60,7 +61,8 @@ MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
 
 class BaseRPMBuilder(BaseBuilder):
 
-    def __init__(self, config, logger, task, task_dir, artifacts_dir):
+    def __init__(self, config, logger, task,
+                 task_dir, artifacts_dir, cas_wrapper):
         """
         RPM builder initialization.
 
@@ -76,9 +78,13 @@ class BaseRPMBuilder(BaseBuilder):
             Build task working directory.
         artifacts_dir : str
             Build artifacts (src-RPM, RPM(s), logs, etc) output directory.
+        cas_wrapper: CasWrapper
+            CasWrapper instance
         """
         super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
                                              artifacts_dir)
+        self.cas_wrapper = cas_wrapper
+        self.codenotary_enabled = config.codenotary_enabled
 
     @measure_stage('build_all')
     def build(self):
@@ -107,6 +113,13 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
+                    if self.codenotary_enabled:
+                        is_authenticated, commit_cas_hash = (
+                            self.cas_wrapper.authenticate_source(
+                                f'git://{git_sources_dir}')
+                        )
+                        self.task.is_cas_authenticated = is_authenticated
+                        self.task.alma_commit_cas_hash = commit_cas_hash
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
@@ -384,31 +397,45 @@ class BaseRPMBuilder(BaseBuilder):
         """
         yum_repos = []
         for repo in task.repositories:
+            if not repo.mock_enabled:
+                continue
+            repo_kwargs = {}
+            if re.search(r'AlmaLinux-\d-.*-\d+-br', repo.url):
+                repo_kwargs['module_hotfixes'] = True
             yum_repos.append(
                 YumRepositoryConfig(
                     repositoryid=repo.name,
                     name=repo.name,
                     priority=str(repo.priority),
-                    baseurl=repo.url)
+                    baseurl=repo.url,
+                    **repo_kwargs
+                ),
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
-        mock_config_kwargs = {'use_bootstrap_container': False}
+        mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
         target_arch = task.arch
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value
-            elif not task.is_secure_boot and key == 'macros':
-                continue
+            elif key == 'macros':
+                mock_config_kwargs['macros'].update(value)
+            elif key == 'secure_boot_macros':
+                if not task.is_secure_boot:
+                    continue
+                mock_config_kwargs['macros'].update(value)
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
-            dist=task.platform.data.get('mock_dist'), use_nspawn=False,
+            dist=task.platform.data.get('mock_dist'),
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
+            yum_config=yum_config, target_arch=target_arch,
+            basedir=config.mock_basedir, **mock_config_kwargs
         )
         if task.is_secure_boot:
+            mock_config.set_config_opts({'isolation': 'simple'})
+            mock_config.append_config_opt('nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin')
             bind_plugin = MockBindMountPluginConfig(
                 True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
