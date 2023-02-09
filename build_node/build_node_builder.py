@@ -7,6 +7,7 @@ CloudLinux Build System build thread implementation.
 """
 
 import datetime
+import gzip
 import logging
 import os
 import time
@@ -105,7 +106,7 @@ class BuildNodeBuilder(threading.Thread):
             ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(artifacts_dir, f'albs.{ts}.log')
+            task_log_file = os.path.join(task_dir, f'albs.{ts}.log')
             task_log_handler = None
             success = False
             excluded = False
@@ -166,6 +167,10 @@ class BuildNodeBuilder(threading.Thread):
                     build_artifacts = []
                     success = False
                 finally:
+                    with open(task_log_file, 'rb') as src:
+                        content = src.read()
+                    with open(task_log_file, 'wb') as dst:
+                        dst.write(gzip.compress(content))
                     build_artifacts.append(
                         self._pulp_uploader.upload_single_file(task_log_file)
                     )

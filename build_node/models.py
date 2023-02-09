@@ -71,4 +71,4 @@ class Artifact(BaseModel):
     href: str
     sha256: str
     path: str
-    cas_hash: typing.Optional[str]
+    cas_hash: typing.Optional[str] = None

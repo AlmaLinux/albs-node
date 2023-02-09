@@ -6,6 +6,7 @@
 Base class for CloudLinux Build System RPM package builders.
 """
 
+import gzip
 import itertools
 import os
 import re
@@ -549,7 +550,7 @@ class BaseRPMBuilder(BaseBuilder):
         suffix = '.srpm' if srpm_artifacts else ''
         ts = int(time.time())
         mock_cfg_file = os.path.join(self.artifacts_dir,
-                                     'mock{0}.{1}.cfg'.format(suffix, ts))
+                                     f'mock{suffix}.{ts}.cfg')
         with open(mock_cfg_file, 'w') as mock_cfg_fd:
             mock_cfg_fd.write(to_unicode(mock_result.mock_config))
         if mock_result.srpm:
@@ -570,22 +571,17 @@ class BaseRPMBuilder(BaseBuilder):
             re_rslt = re.search(r'^(.*?)\.log$', file_name)
             if not re_rslt:
                 continue
-            dst_file_name = 'mock_{log_name}{suffix}.{ts}.log'.\
-                format(log_name=re_rslt.group(1), suffix=suffix, ts=ts)
+            dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{ts}.log'
             dst_file_path = os.path.join(self.artifacts_dir, dst_file_name)
-            # NOTE: mock saves artifacts with broken permissions making
-            #       impossible symlinks usage when modularity is enabled.
-            try:
-                os.link(mock_log_path, dst_file_path)
-            except OSError:
-                shutil.copyfile(mock_log_path, dst_file_path)
+            with open(mock_log_path, 'rb') as src_file:
+                with open(dst_file_path, 'wb') as dst_file:
+                    dst_file.write(gzip.compress(src_file.read()))
         if mock_result.stderr:
-            stderr_file_name = 'mock_stderr{suffix}.{ts}.log'.\
-                format(suffix=suffix, ts=ts)
+            stderr_file_name = f'mock_stderr{suffix}.{ts}.log'
             stderr_file_path = os.path.join(self.artifacts_dir,
                                             stderr_file_name)
-            with open(stderr_file_path, 'w') as fd:
-                fd.write(mock_result.stderr)
+            with open(stderr_file_path, 'wb') as dst:
+                dst.write(gzip.compress(str(mock_result.stderr).encode()))
 
     def is_build_excluded(self, srpm_path):
         """
