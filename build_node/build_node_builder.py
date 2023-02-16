@@ -167,10 +167,8 @@ class BuildNodeBuilder(threading.Thread):
                     build_artifacts = []
                     success = False
                 finally:
-                    with open(task_log_file, 'rb') as src:
-                        content = src.read()
-                    with open(task_log_file, 'wb') as dst:
-                        dst.write(gzip.compress(content))
+                    with open(task_log_file, 'rb+') as src:
+                        src.write(gzip.compress(src.read()))
                     build_artifacts.append(
                         self._pulp_uploader.upload_single_file(task_log_file)
                     )

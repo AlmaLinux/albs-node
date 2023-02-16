@@ -573,9 +573,8 @@ class BaseRPMBuilder(BaseBuilder):
                 continue
             dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{ts}.log'
             dst_file_path = os.path.join(self.artifacts_dir, dst_file_name)
-            with open(mock_log_path, 'rb') as src_file:
-                with open(dst_file_path, 'wb') as dst_file:
-                    dst_file.write(gzip.compress(src_file.read()))
+            with open(mock_log_path, 'rb') as src_fd, open(dst_file_path, 'wb') as dst_fd:
+                dst_fd.write(gzip.compress(src_fd.read()))
         if mock_result.stderr:
             stderr_file_name = f'mock_stderr{suffix}.{ts}.log'
             stderr_file_path = os.path.join(self.artifacts_dir,
