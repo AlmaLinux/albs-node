@@ -7,6 +7,7 @@ CloudLinux Build System build thread implementation.
 """
 
 import datetime
+import gzip
 import logging
 import os
 import time
@@ -157,6 +158,7 @@ class BuildNodeBuilder(threading.Thread):
                             'Cannot notarize following artifacts:\n%s',
                             '\n'.join(non_notarized_artifacts),
                         )
+                build_artifacts = []
                 try:
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, only_logs=only_logs)
@@ -165,6 +167,8 @@ class BuildNodeBuilder(threading.Thread):
                     build_artifacts = []
                     success = False
                 finally:
+                    with open(task_log_file, 'rb+') as src:
+                        src.write(gzip.compress(src.read()))
                     build_artifacts.append(
                         self._pulp_uploader.upload_single_file(task_log_file)
                     )
