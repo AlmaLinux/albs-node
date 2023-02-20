@@ -167,8 +167,6 @@ class BuildNodeBuilder(threading.Thread):
                     build_artifacts = []
                     success = False
                 finally:
-                    with open(task_log_file, 'rb+') as src:
-                        src.write(gzip.compress(src.read()))
                     build_artifacts.append(
                         self._pulp_uploader.upload_single_file(task_log_file)
                     )
@@ -357,7 +355,9 @@ class BuildNodeBuilder(threading.Thread):
         logging.Handler
             Task logging handler.
         """
-        handler = logging.FileHandler(log_file)
+        handler = logging.StreamHandler(
+            gzip.open(log_file, 'wt', encoding='utf-8'),
+        )
         handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s %(levelname)-8s]: "
                                       "%(message)s", "%H:%M:%S %d.%m.%y")
