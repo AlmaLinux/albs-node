@@ -49,9 +49,11 @@ def measure_stage(stage):
                 traceback.print_exc()
                 raise e
             finally:
+                end_time = datetime.datetime.utcnow()
                 self._build_stats[stage] = {
-                    'start_ts': start_time,
-                    'end_ts': datetime.datetime.utcnow()
+                    'start_ts': str(start_time),
+                    'end_ts': str(end_time),
+                    'delta': str(end_time - start_time),
                 }
         return wrapped
     return wrapper
@@ -86,6 +88,7 @@ class BaseBuilder(object):
         self._build_stats = {}
         self._pre_build_hook_target_arch = self.config.base_arch
 
+    @measure_stage("git_checkout")
     def checkout_git_sources(self, git_sources_dir, ref):
         """
         Checkouts a project sources from the specified git repository.

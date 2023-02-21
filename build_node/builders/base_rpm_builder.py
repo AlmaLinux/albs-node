@@ -115,12 +115,7 @@ class BaseRPMBuilder(BaseBuilder):
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
-                        is_authenticated, commit_cas_hash = (
-                            self.cas_wrapper.authenticate_source(
-                                f'git://{git_sources_dir}')
-                        )
-                        self.task.is_cas_authenticated = is_authenticated
-                        self.task.alma_commit_cas_hash = commit_cas_hash
+                        self.cas_source_authenticate(git_sources_dir)
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
@@ -161,6 +156,16 @@ class BaseRPMBuilder(BaseBuilder):
                               str(e), traceback.format_exc()))
             raise BuildError(str(e))
 
+    @measure_stage("cas_source_authenticate")
+    def cas_source_authenticate(self, git_sources_dir: str):
+        is_authenticated, commit_cas_hash = (
+            self.cas_wrapper.authenticate_source(
+                f'git://{git_sources_dir}')
+        )
+        self.task.is_cas_authenticated = is_authenticated
+        self.task.alma_commit_cas_hash = commit_cas_hash
+
+    @measure_stage("build_srpm")
     def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,
                    definitions=None):
         """
@@ -250,6 +255,7 @@ class BaseRPMBuilder(BaseBuilder):
                     self.save_build_artifacts(rpm_build_result)
         self.logger.info('RPM build completed')
 
+    @measure_stage("sources_unpack")
     def unpack_sources(self):
         """
         Unpacks already built src-RPM

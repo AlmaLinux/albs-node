@@ -27,6 +27,7 @@ from sentry_sdk import capture_exception
 
 from build_node import constants
 from build_node.builders import get_suitable_builder
+from build_node.builders.base_builder import measure_stage
 from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.uploaders.pulp import PulpRpmUploader
 from build_node.utils.file_utils import (
@@ -73,6 +74,7 @@ class BuildNodeBuilder(threading.Thread):
         self.__session = None
         self._cas_wrapper = None
         self._codenotary_enabled = self.__config.codenotary_enabled
+        self._build_stats: typing.Optional[typing.Dict[str, typing.Dict[str, str]]] = None
         self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
             self.__config.pulp_password, self.__config.pulp_chunk_size,
@@ -84,6 +86,7 @@ class BuildNodeBuilder(threading.Thread):
         self.__hostname = platform.node()
 
     def run(self):
+        self._build_stats = {}
         log_file = os.path.join(self.__working_dir,
                                 'bt-{0}.log'.format(self.name))
         self.__logger = self.init_thread_logger(log_file)
@@ -141,22 +144,21 @@ class BuildNodeBuilder(threading.Thread):
                     (
                         notarized_artifacts,
                         non_notarized_artifacts,
-                    ) = notarize_build_artifacts(
+                    ) = self.__cas_notarize_artifacts(
                         task,
                         artifacts_dir,
-                        self._cas_wrapper,
-                        self.__hostname,
                     )
                     self.__logger.debug(
-                        'List of notarized and not notarized artifacts:')
-                    self.__logger.debug(pprint.pformat(notarized_artifacts))
-                    self.__logger.debug(pprint.pformat(non_notarized_artifacts))
+                        'List of notarized and not notarized artifacts:\n%s\n%s',
+                        pprint.pformat(notarized_artifacts),
+                        pprint.pformat(non_notarized_artifacts),
+                    )
                     if non_notarized_artifacts:
                         only_logs = True
                         success = False
                         self.__logger.error(
                             'Cannot notarize following artifacts:\n%s',
-                            '\n'.join(non_notarized_artifacts),
+                            pprint.pformat(non_notarized_artifacts),
                         )
                 build_artifacts = []
                 try:
@@ -174,6 +176,16 @@ class BuildNodeBuilder(threading.Thread):
                 for artifact in build_artifacts:
                     artifact.cas_hash = notarized_artifacts.get(artifact.path)
 
+                end_ts = datetime.datetime.utcnow()
+                delta = end_ts - self.__start_ts
+                self._build_stats.update({
+                    "build_node_task": {
+                        "start_ts": str(self.__start_ts),
+                        "end_ts": str(end_ts),
+                        "delta": str(delta),
+                    },
+                    **self.__builder.get_build_stats(),
+                })
                 try:
                     if not success and excluded:
                         self.__report_excluded_task(
@@ -188,6 +200,7 @@ class BuildNodeBuilder(threading.Thread):
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
                 self.__start_ts = None
+                self._build_stats = None
                 if os.path.exists(task_dir):
                     self.__logger.debug(
                         'cleaning up task build directory %s',
@@ -198,6 +211,23 @@ class BuildNodeBuilder(threading.Thread):
                     #       without root permissions
                     rm_sudo(task_dir)
                 self.__builder = None
+
+    @measure_stage("cas_notarize_artifacts")
+    def __cas_notarize_artifacts(
+        self,
+        task: Task,
+        artifacts_dir: str,
+    ) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+        (
+            notarized_artifacts,
+            non_notarized_artifacts,
+        ) = notarize_build_artifacts(
+            task,
+            artifacts_dir,
+            self._cas_wrapper,
+            self.__hostname,
+        )
+        return notarized_artifacts, non_notarized_artifacts
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
@@ -219,6 +249,7 @@ class BuildNodeBuilder(threading.Thread):
                                        self._cas_wrapper)
         self.__builder.build()
 
+    @measure_stage("upload")
     def __upload_artifacts(self, artifacts_dir,
                            only_logs: bool = False):
         artifacts = self._pulp_uploader.upload(
@@ -254,6 +285,7 @@ class BuildNodeBuilder(threading.Thread):
             'task_id': task.id,
             'status': 'excluded',
             'artifacts': [artifact.dict() for artifact in artifacts],
+            'stats': self._build_stats,
             'is_cas_authenticated': task.is_cas_authenticated,
             'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
@@ -271,6 +303,7 @@ class BuildNodeBuilder(threading.Thread):
             'task_id': task.id,
             'status': 'done' if success else 'failed',
             'artifacts': [artifact.dict() for artifact in artifacts],
+            'stats': self._build_stats,
             'is_cas_authenticated': task.is_cas_authenticated,
             'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
