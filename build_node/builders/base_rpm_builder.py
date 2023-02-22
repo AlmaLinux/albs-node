@@ -197,7 +197,38 @@ class BaseRPMBuilder(BaseBuilder):
                                       definitions=definitions,
                                       timeout=self.build_timeout)
 
-    @measure_stage('build_binary')
+    @measure_stage('build_binaries')
+    def build_binaries(self, srpm_path, definitions=None):
+        """
+        Builds binary RPM packages, saves build artifacts
+        to the artifacts directory.
+
+        Parameters
+        ----------
+        srpm_path : str
+            Path to SRPM
+        definitions : dict, optional
+            Dictionary with mock optional definitions
+        """
+        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
+        rpm_mock_config = self.generate_mock_config(self.config, self.task)
+        rpm_build_result = None
+        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
+            try:
+                rpm_build_result = mock_env.rebuild(
+                    srpm_path,
+                    rpm_result_dir,
+                    definitions=definitions,
+                    timeout=self.build_timeout,
+                )
+            except MockError as e:
+                rpm_build_result = e
+                raise BuildError(f'RPM build failed: {str(e)}')
+            finally:
+                if rpm_build_result:
+                    self.save_build_artifacts(rpm_build_result)
+
+    @measure_stage('build_packages')
     def build_packages(self, src_dir, spec_file=None):
         """
         Builds src-RPM and binary RPM packages, saves build artifacts to the
@@ -239,20 +270,7 @@ class BaseRPMBuilder(BaseBuilder):
         if excluded:
             raise BuildExcluded(reason)
         self.logger.info('starting RPM build')
-        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
-        rpm_mock_config = self.generate_mock_config(self.config, self.task)
-        rpm_build_result = None
-        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
-            try:
-                rpm_build_result = mock_env.rebuild(srpm_path, rpm_result_dir,
-                                                    definitions=mock_defines,
-                                                    timeout=self.build_timeout)
-            except MockError as e:
-                rpm_build_result = e
-                raise BuildError('RPM build failed: {0}'.format(str(e)))
-            finally:
-                if rpm_build_result:
-                    self.save_build_artifacts(rpm_build_result)
+        self.build_binaries(srpm_path, mock_defines)
         self.logger.info('RPM build completed')
 
     @measure_stage("sources_unpack")

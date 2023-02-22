@@ -10,7 +10,6 @@ import datetime
 import gzip
 import logging
 import os
-import time
 import urllib.parse
 import platform
 import pprint
@@ -19,7 +18,6 @@ import threading
 import typing
 
 from cas_wrapper import CasWrapper
-import yaml
 import requests
 import requests.adapters
 from requests.packages.urllib3.util.retry import Retry
@@ -254,15 +252,6 @@ class BuildNodeBuilder(threading.Thread):
                            only_logs: bool = False):
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
-        build_stats = self.__builder.get_build_stats()
-        timestamp = time.time()
-        build_stats_path = os.path.join(
-            artifacts_dir, f'build_stats_{timestamp}.yml')
-        with open(build_stats_path, 'w') as fd:
-            fd.write(yaml.dump(build_stats))
-        artifacts.append(
-            self._pulp_uploader.upload_single_file(build_stats_path)
-        )
         return artifacts
 
     def __request_task(self):
