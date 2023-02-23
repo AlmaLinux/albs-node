@@ -20,11 +20,13 @@ import sentry_sdk
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
+from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.build_node_supervisor import BuilderSupervisor
+from build_node.mock.mock_environment import MockError
 from build_node.utils.file_utils import chown_recursive, rm_sudo
 from build_node.utils.config import locate_config_file
 from build_node.utils.log import configure_logger
-
+from build_node.utils.spec_parser import SpecParseError
 
 running = True
 
@@ -101,6 +103,7 @@ def init_sentry(config):
         dsn=config.sentry_dsn,
         traces_sample_rate=config.sentry_traces_sample_rate,
         environment=config.sentry_environment,
+        ignore_errors=[MockError, BuildError, BuildExcluded, SpecParseError],
     )
 
 
