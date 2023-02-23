@@ -115,12 +115,7 @@ class BaseRPMBuilder(BaseBuilder):
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
-                        is_authenticated, commit_cas_hash = (
-                            self.cas_wrapper.authenticate_source(
-                                f'git://{git_sources_dir}')
-                        )
-                        self.task.is_cas_authenticated = is_authenticated
-                        self.task.alma_commit_cas_hash = commit_cas_hash
+                        self.cas_source_authenticate(git_sources_dir)
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
@@ -161,6 +156,16 @@ class BaseRPMBuilder(BaseBuilder):
                               str(e), traceback.format_exc()))
             raise BuildError(str(e))
 
+    @measure_stage("cas_source_authenticate")
+    def cas_source_authenticate(self, git_sources_dir: str):
+        is_authenticated, commit_cas_hash = (
+            self.cas_wrapper.authenticate_source(
+                f'git://{git_sources_dir}')
+        )
+        self.task.is_cas_authenticated = is_authenticated
+        self.task.alma_commit_cas_hash = commit_cas_hash
+
+    @measure_stage("build_srpm")
     def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,
                    definitions=None):
         """
@@ -192,7 +197,38 @@ class BaseRPMBuilder(BaseBuilder):
                                       definitions=definitions,
                                       timeout=self.build_timeout)
 
-    @measure_stage('build_binary')
+    @measure_stage('build_binaries')
+    def build_binaries(self, srpm_path, definitions=None):
+        """
+        Builds binary RPM packages, saves build artifacts
+        to the artifacts directory.
+
+        Parameters
+        ----------
+        srpm_path : str
+            Path to SRPM
+        definitions : dict, optional
+            Dictionary with mock optional definitions
+        """
+        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
+        rpm_mock_config = self.generate_mock_config(self.config, self.task)
+        rpm_build_result = None
+        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
+            try:
+                rpm_build_result = mock_env.rebuild(
+                    srpm_path,
+                    rpm_result_dir,
+                    definitions=definitions,
+                    timeout=self.build_timeout,
+                )
+            except MockError as e:
+                rpm_build_result = e
+                raise BuildError(f'RPM build failed: {str(e)}')
+            finally:
+                if rpm_build_result:
+                    self.save_build_artifacts(rpm_build_result)
+
+    @measure_stage('build_packages')
     def build_packages(self, src_dir, spec_file=None):
         """
         Builds src-RPM and binary RPM packages, saves build artifacts to the
@@ -234,22 +270,10 @@ class BaseRPMBuilder(BaseBuilder):
         if excluded:
             raise BuildExcluded(reason)
         self.logger.info('starting RPM build')
-        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
-        rpm_mock_config = self.generate_mock_config(self.config, self.task)
-        rpm_build_result = None
-        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
-            try:
-                rpm_build_result = mock_env.rebuild(srpm_path, rpm_result_dir,
-                                                    definitions=mock_defines,
-                                                    timeout=self.build_timeout)
-            except MockError as e:
-                rpm_build_result = e
-                raise BuildError('RPM build failed: {0}'.format(str(e)))
-            finally:
-                if rpm_build_result:
-                    self.save_build_artifacts(rpm_build_result)
+        self.build_binaries(srpm_path, mock_defines)
         self.logger.info('RPM build completed')
 
+    @measure_stage("sources_unpack")
     def unpack_sources(self):
         """
         Unpacks already built src-RPM
