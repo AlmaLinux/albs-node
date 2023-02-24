@@ -84,7 +84,6 @@ class BuildNodeBuilder(threading.Thread):
         self.__hostname = platform.node()
 
     def run(self):
-        self._build_stats = {}
         log_file = os.path.join(self.__working_dir,
                                 'bt-{0}.log'.format(self.name))
         self.__logger = self.init_thread_logger(log_file)
@@ -102,6 +101,7 @@ class BuildNodeBuilder(threading.Thread):
                 self.__logger.debug('there are no tasks to process')
                 self.__terminated_event.wait(random.randint(5, 10))
                 continue
+            self._build_stats = {}
             self.__current_task_id = task.id
             self.__start_ts = datetime.datetime.utcnow()
             ts = int(self.__start_ts.timestamp())
