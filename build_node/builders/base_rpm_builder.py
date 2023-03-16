@@ -571,10 +571,11 @@ class BaseRPMBuilder(BaseBuilder):
             Artifacts were produced during src-RPM build if True or during
             binary RPM(s) build otherwise.
         """
+        task_id = self.task.id
         suffix = '.srpm' if srpm_artifacts else ''
         ts = int(time.time())
         mock_cfg_file = os.path.join(self.artifacts_dir,
-                                     f'mock{suffix}.{ts}.cfg')
+                                     f'mock{suffix}.{task_id}.{ts}.cfg')
         with open(mock_cfg_file, 'w') as mock_cfg_fd:
             mock_cfg_fd.write(to_unicode(mock_result.mock_config))
         if mock_result.srpm:
@@ -595,12 +596,12 @@ class BaseRPMBuilder(BaseBuilder):
             re_rslt = re.search(r'^(.*?)\.log$', file_name)
             if not re_rslt:
                 continue
-            dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{ts}.log'
+            dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{task_id}.{ts}.log'
             dst_file_path = os.path.join(self.artifacts_dir, dst_file_name)
             with open(mock_log_path, 'rb') as src_fd, open(dst_file_path, 'wb') as dst_fd:
                 dst_fd.write(gzip.compress(src_fd.read()))
         if mock_result.stderr:
-            stderr_file_name = f'mock_stderr{suffix}.{ts}.log'
+            stderr_file_name = f'mock_stderr{suffix}.{task_id}.{ts}.log'
             stderr_file_path = os.path.join(self.artifacts_dir,
                                             stderr_file_name)
             with open(stderr_file_path, 'wb') as dst:
