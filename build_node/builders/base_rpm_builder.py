@@ -19,7 +19,6 @@ from distutils.dir_util import copy_tree
 
 import validators
 import rpm
-from plumbum.commands.processes import ProcessExecutionError
 
 from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
@@ -152,8 +151,10 @@ class BaseRPMBuilder(BaseBuilder):
         except BuildExcluded as e:
             raise e
         except Exception as e:
-            self.logger.error('can not process: {0}\nTraceback:\n{1}'.format(
-                              str(e), traceback.format_exc()))
+            self.logger.warning(
+                'can not process: %s\nTraceback:\n%s',
+                str(e), traceback.format_exc()
+            )
             raise BuildError(str(e))
 
     @measure_stage("cas_source_authenticate")
@@ -264,8 +265,7 @@ class BaseRPMBuilder(BaseBuilder):
                 self.save_build_artifacts(srpm_build_result,
                                           srpm_artifacts=True)
         srpm_path = srpm_build_result.srpm
-        self.logger.info('src-RPM {0} was successfully built'.
-                         format(srpm_path))
+        self.logger.info('src-RPM %s was successfully built', srpm_path)
         excluded, reason = self.is_build_excluded(srpm_path)
         if excluded:
             raise BuildExcluded(reason)
@@ -287,12 +287,12 @@ class BaseRPMBuilder(BaseBuilder):
             srpm_url = self.task.ref.url
         else:
             srpm_url = self.task.built_srpm_url
-        self.logger.info(f'repacking previously built src-RPM {srpm_url}')
+        self.logger.info('repacking previously built src-RPM %s', srpm_url)
         src_dir = os.path.join(self.task_dir, 'srpm_sources')
         os.makedirs(src_dir)
-        self.logger.debug('Downloading {0}'.format(srpm_url))
+        self.logger.debug('Downloading %s', srpm_url)
         srpm = download_file(srpm_url, src_dir, timeout=900)
-        self.logger.debug('Unpacking {0} to the {1}'.format(srpm, src_dir))
+        self.logger.debug('Unpacking %s to the %s', srpm, src_dir)
         unpack_src_rpm(srpm, os.path.dirname(srpm))
         self.logger.info('Sources are prepared')
         return src_dir
@@ -409,7 +409,7 @@ class BaseRPMBuilder(BaseBuilder):
         ----------
         config : BuildNodeConfig
             Build node configuration object.
-        task : dict
+        task : build_node.models.Task
             Task for which to generate a mock chroot configuration.
         srpm_build : bool, optional
             Use only yum repositories which are required for src-RPM build if
@@ -460,7 +460,9 @@ class BaseRPMBuilder(BaseBuilder):
         )
         if task.is_secure_boot:
             mock_config.set_config_opts({'isolation': 'simple'})
-            mock_config.append_config_opt('nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin')
+            mock_config.append_config_opt(
+                'nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin'
+            )
             bind_plugin = MockBindMountPluginConfig(
                 True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
