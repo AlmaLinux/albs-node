@@ -112,7 +112,7 @@ class BaseBuilder(object):
         with MirroredGitRepo(
                 ref.url, self.config.git_repos_cache_dir,
                 self.config.git_cache_locks_dir,
-                timeout=600) as cached_repo:
+                timeout=600, git_command_extras=self.config.git_extra_options) as cached_repo:
             repo = cached_repo.clone_to(git_sources_dir)
             repo.checkout(ref.git_ref)
         self.__log_commit_id(git_sources_dir)
