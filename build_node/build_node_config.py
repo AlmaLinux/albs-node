@@ -119,8 +119,10 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
             'base_arch': DEFAULT_BASE_ARCH,
-            'cas_api_key': None,
-            'cas_signer_id': None,
+            'vcn_lc_api_key': None,
+            'vcn_lc_host': None,
+            'vcn_lc_port': 443,
+            'vcn_binary_path': '/build-node/',
             'request_timeout': DEFAULT_REQUEST_TIMEOUT
         }
         schema = {
@@ -151,8 +153,10 @@ class BuildNodeConfig(BaseConfig):
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'nullable': True},
-            'cas_api_key': {'type': 'string', 'nullable': True},
-            'cas_signer_id': {'type': 'string', 'nullable': True},
+            'vcn_lc_api_key': {'type': 'string', 'nullable': True},
+            'vcn_lc_host': {'type': 'string', 'nullable': True},
+            'vcn_lc_port': {'type': 'integer', 'nullable': True},
+            'vcn_binary_path': {'type': 'string', 'nullable': True},
             'base_arch': {'type': 'string', 'nullable': False},
             'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
                              'required': True},
@@ -163,7 +167,7 @@ class BuildNodeConfig(BaseConfig):
 
     @property
     def codenotary_enabled(self) -> bool:
-        return bool(self.cas_api_key) and bool(self.cas_signer_id)
+        return bool(self.vcn_lc_api_key) and bool(self.vcn_lc_host)
 
     @property
     def mock_configs_storage_dir(self):

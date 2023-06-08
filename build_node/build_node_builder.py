@@ -89,8 +89,10 @@ class BuildNodeBuilder(threading.Thread):
         self.__logger = self.init_thread_logger(log_file)
         if self._codenotary_enabled:
             self._cas_wrapper = CasWrapper(
-                cas_api_key=self.__config.cas_api_key,
-                cas_signer_id=self.__config.cas_signer_id,
+                vcn_lc_api_key=self.__config.vcn_lc_api_key,
+                vcn_lc_host=self.__config.vcn_lc_host,
+                vcn_lc_port=self.__config.vcn_lc_port,
+                binary_path=self.__config.vcn_binary_path,
                 logger=self.__logger,
             )
         self.__logger.info('starting %s', self.name)
