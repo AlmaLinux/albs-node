@@ -139,8 +139,9 @@ class BaseRPMBuilder(BaseBuilder):
                 finally:
                     os.chdir(cwd)
             else:
-                source_srpm_dir = self.unpack_sources()
-                spec_file = self.locate_spec_file(source_srpm_dir)
+                source_srpm_dir = self.unpack_sources(True) # download only
+                spec_file = None
+
             if self.task.platform.data.get('allow_sources_download'):
                 mock_defines = self.task.platform.data.get('definitions')
                 self.download_remote_sources(source_srpm_dir, spec_file,
@@ -235,8 +236,8 @@ class BaseRPMBuilder(BaseBuilder):
 
         Parameters
         ----------
-        src_dir : str
-            Path to the src-RPM sources.
+        src: str
+            Path to the src-RPM archive or unpacked sources.
         spec_file : str, optional
             Spec file path. It will be detected automatically if omitted.
         """
@@ -247,39 +248,53 @@ class BaseRPMBuilder(BaseBuilder):
         srpm_mock_config = self.generate_mock_config(self.config, self.task,
                                                      srpm_build=True)
         srpm_build_result = None
-        try:
-            srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
-                                                srpm_result_dir,
-                                                spec_file=spec_file,
-                                                definitions=mock_defines)
-        except MockError as e:
-            excluded, reason = self.is_srpm_build_excluded(e)
+        srpm_path = None
+
+        if os.path.isdir(src): # if SPRM source directory given
+            try:
+                srpm_build_result = self.build_srpm(srpm_mock_config, src,
+                                                    srpm_result_dir,
+                                                    spec_file=spec_file,
+                                                    definitions=mock_defines)
+            except MockError as e:
+                excluded, reason = self.is_srpm_build_excluded(e)
+                if excluded:
+                    raise BuildExcluded(reason)
+                srpm_build_result = e
+                raise BuildError('src-RPM build failed: {0}'.format(str(e)))
+            finally:
+                if srpm_build_result:
+                    self.save_build_artifacts(srpm_build_result,
+                                              srpm_artifacts=True)
+            srpm_path = srpm_build_result.srpm
+            self.logger.info('src-RPM %s was successfully built', srpm_path)
+            excluded, reason = self.is_build_excluded(srpm_path)
             if excluded:
                 raise BuildExcluded(reason)
-            srpm_build_result = e
-            raise BuildError('src-RPM build failed: {0}'.format(str(e)))
-        finally:
-            if srpm_build_result:
-                self.save_build_artifacts(srpm_build_result,
-                                          srpm_artifacts=True)
-        srpm_path = srpm_build_result.srpm
-        self.logger.info('src-RPM %s was successfully built', srpm_path)
-        excluded, reason = self.is_build_excluded(srpm_path)
-        if excluded:
-            raise BuildExcluded(reason)
+        elif os.path.isfile(src) and src.endswith('src.rpm'): # if SRPM archive is given
+            srpm_path = src
+        else:
+            raise RuntimeError("Neither a directory or a src-RPM archive: {0}".format(str(src)))
+
         self.logger.info('starting RPM build')
         self.build_binaries(srpm_path, mock_defines)
         self.logger.info('RPM build completed')
 
     @measure_stage("sources_unpack")
-    def unpack_sources(self):
+    def unpack_sources(self, download_only = False):
         """
         Unpacks already built src-RPM
+
+        Parameters
+        ----------
+        download_only: bool, optional
+            Just download src-RPM, do not unpack downloaded src-RPM
 
         Returns
         -------
         str
             Path to the unpacked src-RPM sources.
+            Path to the full path to downloaded src-RPM (if download_only=True)
         """
         if self.task.ref.url.endswith('src.rpm'):
             srpm_url = self.task.ref.url
@@ -290,6 +305,11 @@ class BaseRPMBuilder(BaseBuilder):
         os.makedirs(src_dir)
         self.logger.debug('Downloading %s', srpm_url)
         srpm = download_file(srpm_url, src_dir, timeout=900)
+
+        if download_only:
+            self.logger.debug('Downloaded src-rpm: %s', srpm)
+            return srpm
+
         self.logger.debug('Unpacking %s to the %s', srpm, src_dir)
         unpack_src_rpm(srpm, os.path.dirname(srpm))
         self.logger.info('Sources are prepared')
