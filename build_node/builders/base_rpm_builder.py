@@ -270,10 +270,12 @@ class BaseRPMBuilder(BaseBuilder):
             excluded, reason = self.is_build_excluded(srpm_path)
             if excluded:
                 raise BuildExcluded(reason)
-        elif os.path.isfile(src) and src.endswith('src.rpm'): # if SRPM archive is given
+        # if SRPM archive is given
+        elif os.path.isfile(src) and src.endswith('src.rpm'):
             srpm_path = src
         else:
-            raise RuntimeError("Neither a directory or a src-RPM archive: {0}".format(str(src)))
+            raise RuntimeError("Neither a directory or a src-RPM archive: {0}"
+                               .format(str(src)))
 
         self.logger.info('starting RPM build')
         self.build_binaries(srpm_path, mock_defines)
