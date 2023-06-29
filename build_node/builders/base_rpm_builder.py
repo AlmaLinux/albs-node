@@ -229,7 +229,7 @@ class BaseRPMBuilder(BaseBuilder):
                     self.save_build_artifacts(rpm_build_result)
 
     @measure_stage('build_packages')
-    def build_packages(self, src_dir, spec_file=None):
+    def build_packages(self, src, spec_file=None):
         """
         Builds src-RPM and binary RPM packages, saves build artifacts to the
         artifacts directory.
