@@ -140,7 +140,6 @@ class BaseRPMBuilder(BaseBuilder):
                     os.chdir(cwd)
             else:
                 source_srpm_dir = self.unpack_sources(True) # download only
-                spec_file = None
 
             if self.task.platform.data.get('allow_sources_download'):
                 mock_defines = self.task.platform.data.get('definitions')
