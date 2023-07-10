@@ -248,10 +248,11 @@ class BaseRPMBuilder(BaseBuilder):
                                                      srpm_build=True)
         srpm_build_result = None
         try:
-            srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
-                                                srpm_result_dir,
-                                                spec_file=spec_file,
-                                                definitions=mock_defines)
+            if not self.built_srpm_url:
+                srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
+                                                    srpm_result_dir,
+                                                    spec_file=spec_file,
+                                                    definitions=mock_defines)
         except MockError as e:
             excluded, reason = self.is_srpm_build_excluded(e)
             if excluded:
@@ -262,8 +263,13 @@ class BaseRPMBuilder(BaseBuilder):
             if srpm_build_result:
                 self.save_build_artifacts(srpm_build_result,
                                           srpm_artifacts=True)
-        srpm_path = srpm_build_result.srpm
-        self.logger.info('src-RPM %s was successfully built', srpm_path)
+        if srpm_build_result:
+            srpm_path = srpm_build_result.srpm
+            self.logger.info('src-RPM %s was successfully built', srpm_path)
+        elif self.task.built_srpm_url:
+            srpm_path = built_srpm_url
+            self.logger.info('src-RPM %s is already built', built_srpm_url)
+
         excluded, reason = self.is_build_excluded(srpm_path)
         if excluded:
             raise BuildExcluded(reason)
