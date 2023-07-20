@@ -248,7 +248,7 @@ class BaseRPMBuilder(BaseBuilder):
                                                      srpm_build=True)
         srpm_build_result = None
         try:
-            if not self.built_srpm_url:
+            if not self.task.built_srpm_url:
                 srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
                                                     srpm_result_dir,
                                                     spec_file=spec_file,
@@ -267,8 +267,11 @@ class BaseRPMBuilder(BaseBuilder):
             srpm_path = srpm_build_result.srpm
             self.logger.info('src-RPM %s was successfully built', srpm_path)
         elif self.task.built_srpm_url:
-            srpm_path = built_srpm_url
-            self.logger.info('src-RPM %s is already built', built_srpm_url)
+            srpm_path = self.task.built_srpm_url
+            self.logger.info('src-RPM %s is already built', self.task.built_srpm_url)
+        else:
+            self.logger.error('Both srpm_build_result and built_srpm_url are empty')
+            raise  BuildError('src-RPM is not built')
 
         excluded, reason = self.is_build_excluded(srpm_path)
         if excluded:
