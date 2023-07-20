@@ -267,7 +267,8 @@ class BaseRPMBuilder(BaseBuilder):
             srpm_path = srpm_build_result.srpm
             self.logger.info('src-RPM %s was successfully built', srpm_path)
         elif self.task.built_srpm_url:
-            srpm_path = self.task.built_srpm_url
+            srpm_path = os.path.join(src_dir,
+                                     os.path.basename(self.task.built_srpm_url));
             self.logger.info('src-RPM %s is already built', self.task.built_srpm_url)
         else:
             self.logger.error('Both srpm_build_result and built_srpm_url are empty')
