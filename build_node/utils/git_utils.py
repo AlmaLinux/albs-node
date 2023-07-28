@@ -146,8 +146,9 @@ def git_get_commit_id(repo_path, ref='HEAD'):
     """
     git = plumbum.local['git']
     exit_code, stdout, stderr = \
-        git.run(('log', '--pretty=format:%H', '-n', 1, ref), cwd=repo_path,
-                env={'HISTFILE': '/dev/null', 'LANG': 'C'})
+        git.with_env(HISTFILE='/dev/null', LANG='C').with_cwd(
+            repo_path).run(args=('log', '--pretty=format:%H', '-n', 1, ref),
+                           retcode=None)
     return stdout.strip()
 
 
@@ -187,7 +188,7 @@ def git_ls_remote(repo_path, heads=False, tags=False):
         args.append('--tags')
     args.append(repo_path)
     exit_code, stdout, stderr = \
-        git[args].run(env={'HISTFILE': '/dev/null', 'LANG': 'C'})
+        git.with_env(HISTFILE='/dev/null', LANG='C')[args].run(retcode=None)
     refs = []
     for line in stdout.split('\n'):
         line = line.strip()
@@ -264,7 +265,7 @@ def git_merge(repo_path, ref, conflict_callback=None):
     try:
         git = plumbum.local['git']
         git_args = ['merge', ref]
-        git[git_args].run(cwd=repo_path)
+        git.with_cwd(repo_path)[git_args].run()
     except ProcessExecutionError as error:
         files_regex = re.compile(r'Merge\s+conflict\s+in\s+(.*)$', flags=re.M)
         conflict_files = [
@@ -857,7 +858,8 @@ class MirroredGitRepo(object):
         cmd.extend((repo_url, target_dir))
         git_clone = subprocess.Popen(cmd, cwd=self.__base_dir,
                                      stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT)
+                                     stderr=subprocess.STDOUT,
+                                     env={'GIT_TERMINAL_PROMPT': '0'})
         stdout, _ = git_clone.communicate()
         status = git_clone.returncode
         if status != 0:

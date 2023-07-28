@@ -27,6 +27,6 @@ def init_supervisors(config):
         Build node configuration file.
     """
     global MOCK_SUPERVISOR, PBUILDER_SUPERVISOR
-    MOCK_SUPERVISOR = MockSupervisor(config.mock_configs_storage_dir)
+    MOCK_SUPERVISOR = MockSupervisor(config.mock_configs_storage_dir, config.base_arch)
     PBUILDER_SUPERVISOR = \
         PbuilderSupervisor(config.pbuilder_configs_storage_dir)

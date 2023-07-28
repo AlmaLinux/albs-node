@@ -30,7 +30,7 @@ class MockSupervisorError(Exception):
 
 class MockSupervisor(object):
 
-    def __init__(self, storage_dir, idle_time=7200, refresh_time=86400):
+    def __init__(self, storage_dir, host_arch, idle_time=7200, refresh_time=86400):
         """
         mock environments supervisor initialization.
 
@@ -48,6 +48,7 @@ class MockSupervisor(object):
             actively used. Default value is 24 hours.
         """
         self.__log = logging.getLogger(self.__module__)
+        self.__host_arch = host_arch
         self.__storage_dir = storage_dir
         self.__idle_time = idle_time
         self.__refresh_time = refresh_time
@@ -164,7 +165,8 @@ class MockSupervisor(object):
                 self.__scrub_mock_environment(config_path.decode('utf-8'))
                 locks_cursor.pop(config_file)
                 txn.delete(config_file, db=stats_db)
-                os.remove(config_path)
+                if os.path.exists(config_path):
+                    os.remove(config_path)
                 continue
             elif current_ts - creation_ts > self.__refresh_time:
                 # an environment is outdated, regenerate its cache
@@ -173,6 +175,24 @@ class MockSupervisor(object):
                 self.__scrub_mock_environment(config_path)
                 txn.put(config_file, struct.pack('iii', current_ts,
                                                  current_ts, 0), db=stats_db)
+
+    def __generate_site_defaults_config(self):
+        """
+        Generate site-defaults.cfg in MockSupervisor working directory path
+        """
+        config_params = [
+            # Secure Boot options
+            'config_opts["plugin_conf"]["bind_mount_enable"] = True\n',
+        ]
+        if self.__host_arch == 'ppc64le':
+            config_params.append('config_opts["macros"]["%_host_cpu"] = "ppc64le"\n')
+        config_path = os.path.join(self.__storage_dir, 'site-defaults.cfg')
+        self.__log.info(
+            'generating site-defaults.cfg in the %s directory',
+            self.__storage_dir,
+        )
+        with open(config_path, 'w') as config:
+            config.writelines(config_params)
 
     def __init_storage(self):
         """
@@ -195,14 +215,15 @@ class MockSupervisor(object):
             self.__log.info('initializing mock supervisor storage in the {0} '
                             'directory'.format(self.__storage_dir))
             os.makedirs(self.__storage_dir)
-        for mock_cfg in ('logging.ini', 'site-defaults.cfg'):
-            dst = os.path.join(self.__storage_dir, mock_cfg)
-            src = os.path.join('/etc/mock/', mock_cfg)
-            if not os.path.exists(src):
-                raise IOError("No such file or directory: '{}'".format(src))
+        self.__generate_site_defaults_config()
+        log_file = 'logging.ini'
+        dst = os.path.join(self.__storage_dir, log_file)
+        src = os.path.join('/etc/mock/', log_file)
+        if not os.path.exists(src):
+            raise IOError("No such file or directory: '{}'".format(src))
 
-            if not os.path.exists(dst):
-                os.symlink(src, dst)
+        if not os.path.exists(dst):
+            os.symlink(src, dst)
         return lmdb.open(os.path.join(self.__storage_dir,
                                       'mock_supervisor.lmdb'), max_dbs=2)
 

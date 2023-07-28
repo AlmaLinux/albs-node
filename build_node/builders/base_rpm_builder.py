@@ -6,6 +6,7 @@
 Base class for CloudLinux Build System RPM package builders.
 """
 
+import gzip
 import itertools
 import os
 import re
@@ -39,10 +40,27 @@ from build_node.ported import to_unicode
 
 __all__ = ['BaseRPMBuilder']
 
+# 'r' modifier and the number of slashes is intentional, modify very carefully
+# or don't touch this at all
+MODSIGN_CONTENT = r"""
+%__kmod_brps_added 1
+%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/"  ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print -exec /usr/local/bin/modsign %{modsign_os} {} \\\;}
+%__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -print -exec rm -f {} \\\;}
+%__spec_install_post \\
+        %{?__debug_package:%{__debug_install_post}} \\
+        %{__arch_install_post} \\
+        %{__os_install_post} \\
+        %{__brp_kmod_sign} \\
+        %{__brp_kmod_post_sign_process} \\
+        %{nil}
+"""
+MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
+
 
 class BaseRPMBuilder(BaseBuilder):
 
-    def __init__(self, config, logger, task, task_dir, artifacts_dir):
+    def __init__(self, config, logger, task,
+                 task_dir, artifacts_dir, cas_wrapper):
         """
         RPM builder initialization.
 
@@ -58,9 +76,13 @@ class BaseRPMBuilder(BaseBuilder):
             Build task working directory.
         artifacts_dir : str
             Build artifacts (src-RPM, RPM(s), logs, etc) output directory.
+        cas_wrapper: CasWrapper
+            CasWrapper instance
         """
         super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
                                              artifacts_dir)
+        self.cas_wrapper = cas_wrapper
+        self.codenotary_enabled = config.codenotary_enabled
 
     @measure_stage('build_all')
     def build(self):
@@ -89,6 +111,8 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref)
                 if self.task.is_alma_source():
+                    if self.codenotary_enabled:
+                        self.cas_source_authenticate(git_sources_dir)
                     self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
@@ -125,10 +149,22 @@ class BaseRPMBuilder(BaseBuilder):
         except BuildExcluded as e:
             raise e
         except Exception as e:
-            self.logger.error('can not process: {0}\nTraceback:\n{1}'.format(
-                              str(e), traceback.format_exc()))
+            self.logger.warning(
+                'can not process: %s\nTraceback:\n%s',
+                str(e), traceback.format_exc()
+            )
             raise BuildError(str(e))
 
+    @measure_stage("cas_source_authenticate")
+    def cas_source_authenticate(self, git_sources_dir: str):
+        is_authenticated, commit_cas_hash = (
+            self.cas_wrapper.authenticate_source(
+                f'git://{git_sources_dir}')
+        )
+        self.task.is_cas_authenticated = is_authenticated
+        self.task.alma_commit_cas_hash = commit_cas_hash
+
+    @measure_stage("build_srpm")
     def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,
                    definitions=None):
         """
@@ -160,7 +196,38 @@ class BaseRPMBuilder(BaseBuilder):
                                       definitions=definitions,
                                       timeout=self.build_timeout)
 
-    @measure_stage('build_binary')
+    @measure_stage('build_binaries')
+    def build_binaries(self, srpm_path, definitions=None):
+        """
+        Builds binary RPM packages, saves build artifacts
+        to the artifacts directory.
+
+        Parameters
+        ----------
+        srpm_path : str
+            Path to SRPM
+        definitions : dict, optional
+            Dictionary with mock optional definitions
+        """
+        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
+        rpm_mock_config = self.generate_mock_config(self.config, self.task)
+        rpm_build_result = None
+        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
+            try:
+                rpm_build_result = mock_env.rebuild(
+                    srpm_path,
+                    rpm_result_dir,
+                    definitions=definitions,
+                    timeout=self.build_timeout,
+                )
+            except MockError as e:
+                rpm_build_result = e
+                raise BuildError(f'RPM build failed: {str(e)}')
+            finally:
+                if rpm_build_result:
+                    self.save_build_artifacts(rpm_build_result)
+
+    @measure_stage('build_packages')
     def build_packages(self, src_dir, spec_file=None):
         """
         Builds src-RPM and binary RPM packages, saves build artifacts to the
@@ -196,28 +263,15 @@ class BaseRPMBuilder(BaseBuilder):
                 self.save_build_artifacts(srpm_build_result,
                                           srpm_artifacts=True)
         srpm_path = srpm_build_result.srpm
-        self.logger.info('src-RPM {0} was successfully built'.
-                         format(srpm_path))
+        self.logger.info('src-RPM %s was successfully built', srpm_path)
         excluded, reason = self.is_build_excluded(srpm_path)
         if excluded:
             raise BuildExcluded(reason)
         self.logger.info('starting RPM build')
-        rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
-        rpm_mock_config = self.generate_mock_config(self.config, self.task)
-        rpm_build_result = None
-        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
-            try:
-                rpm_build_result = mock_env.rebuild(srpm_path, rpm_result_dir,
-                                                    definitions=mock_defines,
-                                                    timeout=self.build_timeout)
-            except MockError as e:
-                rpm_build_result = e
-                raise BuildError('RPM build failed: {0}'.format(str(e)))
-            finally:
-                if rpm_build_result:
-                    self.save_build_artifacts(rpm_build_result)
+        self.build_binaries(srpm_path, mock_defines)
         self.logger.info('RPM build completed')
 
+    @measure_stage("sources_unpack")
     def unpack_sources(self):
         """
         Unpacks already built src-RPM
@@ -227,13 +281,16 @@ class BaseRPMBuilder(BaseBuilder):
         str
             Path to the unpacked src-RPM sources.
         """
-        srpm_url = self.task.ref.url
-        self.logger.info(f'repacking previously built src-RPM {srpm_url}')
+        if self.task.ref.url.endswith('src.rpm'):
+            srpm_url = self.task.ref.url
+        else:
+            srpm_url = self.task.built_srpm_url
+        self.logger.info('repacking previously built src-RPM %s', srpm_url)
         src_dir = os.path.join(self.task_dir, 'srpm_sources')
         os.makedirs(src_dir)
-        self.logger.debug('Downloading {0}'.format(srpm_url))
+        self.logger.debug('Downloading %s', srpm_url)
         srpm = download_file(srpm_url, src_dir, timeout=900)
-        self.logger.debug('Unpacking {0} to the {1}'.format(srpm, src_dir))
+        self.logger.debug('Unpacking %s to the %s', srpm, src_dir)
         unpack_src_rpm(srpm, os.path.dirname(srpm))
         self.logger.info('Sources are prepared')
         return src_dir
@@ -350,7 +407,7 @@ class BaseRPMBuilder(BaseBuilder):
         ----------
         config : BuildNodeConfig
             Build node configuration object.
-        task : dict
+        task : build_node.models.Task
             Task for which to generate a mock chroot configuration.
         srpm_build : bool, optional
             Use only yum repositories which are required for src-RPM build if
@@ -363,32 +420,53 @@ class BaseRPMBuilder(BaseBuilder):
         """
         yum_repos = []
         for repo in task.repositories:
+            if not repo.mock_enabled:
+                continue
+            repo_kwargs = {}
+            if re.search(r'AlmaLinux-\d-.*-\d+-br', repo.url):
+                repo_kwargs['module_hotfixes'] = True
             yum_repos.append(
                 YumRepositoryConfig(
                     repositoryid=repo.name,
                     name=repo.name,
-                    baseurl=repo.url)
+                    priority=str(repo.priority),
+                    baseurl=repo.url,
+                    **repo_kwargs
+                ),
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
         yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
                                **yum_config_kwargs)
-        mock_config_kwargs = {'use_bootstrap_container': False}
+        mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
         target_arch = task.arch
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value
+            elif key == 'macros':
+                mock_config_kwargs['macros'].update(value)
+            elif key == 'secure_boot_macros':
+                if not task.is_secure_boot:
+                    continue
+                mock_config_kwargs['macros'].update(value)
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
-            dist=task.platform.data.get('mock_dist'), use_nspawn=False,
+            dist=task.platform.data.get('mock_dist'),
             rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=target_arch, **mock_config_kwargs
+            yum_config=yum_config, target_arch=target_arch,
+            basedir=config.mock_basedir, **mock_config_kwargs
         )
-        if config.pesign_support:
+        if task.is_secure_boot:
+            mock_config.set_config_opts({'isolation': 'simple'})
+            mock_config.append_config_opt(
+                'nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin'
+            )
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/var/run/pesign', '/var/run/pesign'),
-                       ('/etc/pki/kmod', '/etc/pki/kmod')])
+                True, [('/opt/pesign', '/usr/local/bin')])
             mock_config.add_plugin(bind_plugin)
+            mock_config.add_file(
+                MockChrootFile(MODSIGN_MACROS_PATH, MODSIGN_CONTENT)
+            )
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(
                 mock_config, config.npm_proxy)
@@ -493,10 +571,11 @@ class BaseRPMBuilder(BaseBuilder):
             Artifacts were produced during src-RPM build if True or during
             binary RPM(s) build otherwise.
         """
+        task_id = self.task.id
         suffix = '.srpm' if srpm_artifacts else ''
         ts = int(time.time())
         mock_cfg_file = os.path.join(self.artifacts_dir,
-                                     'mock{0}.{1}.cfg'.format(suffix, ts))
+                                     f'mock{suffix}.{task_id}.{ts}.cfg')
         with open(mock_cfg_file, 'w') as mock_cfg_fd:
             mock_cfg_fd.write(to_unicode(mock_result.mock_config))
         if mock_result.srpm:
@@ -517,22 +596,16 @@ class BaseRPMBuilder(BaseBuilder):
             re_rslt = re.search(r'^(.*?)\.log$', file_name)
             if not re_rslt:
                 continue
-            dst_file_name = 'mock_{log_name}{suffix}.{ts}.log'.\
-                format(log_name=re_rslt.group(1), suffix=suffix, ts=ts)
+            dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{task_id}.{ts}.log'
             dst_file_path = os.path.join(self.artifacts_dir, dst_file_name)
-            # NOTE: mock saves artifacts with broken permissions making
-            #       impossible symlinks usage when modularity is enabled.
-            try:
-                os.link(mock_log_path, dst_file_path)
-            except OSError:
-                shutil.copyfile(mock_log_path, dst_file_path)
+            with open(mock_log_path, 'rb') as src_fd, open(dst_file_path, 'wb') as dst_fd:
+                dst_fd.write(gzip.compress(src_fd.read()))
         if mock_result.stderr:
-            stderr_file_name = 'mock_stderr{suffix}.{ts}.log'.\
-                format(suffix=suffix, ts=ts)
+            stderr_file_name = f'mock_stderr{suffix}.{task_id}.{ts}.log'
             stderr_file_path = os.path.join(self.artifacts_dir,
                                             stderr_file_name)
-            with open(stderr_file_path, 'w') as fd:
-                fd.write(mock_result.stderr)
+            with open(stderr_file_path, 'wb') as dst:
+                dst.write(gzip.compress(str(mock_result.stderr).encode()))
 
     def is_build_excluded(self, srpm_path):
         """

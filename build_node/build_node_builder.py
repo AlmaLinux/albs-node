@@ -7,25 +7,34 @@ CloudLinux Build System build thread implementation.
 """
 
 import datetime
+import gzip
 import logging
 import os
-import urllib
+import urllib.parse
 import platform
+import pprint
 import random
 import threading
 import typing
 
-import yaml
+from cas_wrapper import CasWrapper
 import requests
+import requests.adapters
 from requests.packages.urllib3.util.retry import Retry
+from sentry_sdk import capture_exception
 
 from build_node import constants
 from build_node.builders import get_suitable_builder
+from build_node.builders.base_builder import measure_stage
 from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.uploaders.pulp import PulpRpmUploader
-from build_node.utils.file_utils import clean_dir, rm_sudo
+from build_node.utils.file_utils import (
+    clean_dir,
+    filter_files,
+    rm_sudo,
+)
 from build_node.models import Task
-from build_node.utils.sentry_utils import Sentry
+from build_node.utils.codenotary import notarize_build_artifacts
 
 
 class BuildNodeBuilder(threading.Thread):
@@ -58,22 +67,32 @@ class BuildNodeBuilder(threading.Thread):
         self.__current_task_id = None
         # current task processing start timestamp
         self.__start_ts = None
-        self.__sentry = Sentry(config.sentry_dsn)
         # current task builder object
         self.__builder = None
         self.__session = None
+        self._cas_wrapper = None
+        self._codenotary_enabled = self.__config.codenotary_enabled
+        self._build_stats: typing.Optional[typing.Dict[str, typing.Dict[str, str]]] = None
         self._pulp_uploader = PulpRpmUploader(
             self.__config.pulp_host, self.__config.pulp_user,
-            self.__config.pulp_password, self.__config.pulp_chunk_size
+            self.__config.pulp_password, self.__config.pulp_chunk_size,
+            self.__config.pulp_uploader_max_workers
         )
 
         self.__terminated_event = terminated_event
         self.__graceful_terminated_event = graceful_terminated_event
+        self.__hostname = platform.node()
 
     def run(self):
         log_file = os.path.join(self.__working_dir,
                                 'bt-{0}.log'.format(self.name))
         self.__logger = self.init_thread_logger(log_file)
+        if self._codenotary_enabled:
+            self._cas_wrapper = CasWrapper(
+                cas_api_key=self.__config.cas_api_key,
+                cas_signer_id=self.__config.cas_signer_id,
+                logger=self.__logger,
+            )
         self.__logger.info('starting %s', self.name)
         self.__generate_request_session()
         while not self.__graceful_terminated_event.is_set():
@@ -82,65 +101,105 @@ class BuildNodeBuilder(threading.Thread):
                 self.__logger.debug('there are no tasks to process')
                 self.__terminated_event.wait(random.randint(5, 10))
                 continue
+            self._build_stats = {}
             self.__current_task_id = task.id
             self.__start_ts = datetime.datetime.utcnow()
             ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(task_dir, f'albs.{ts}.log')
+            task_log_file = os.path.join(task_dir,
+                                         f'albs.{task.id}.{ts}.log')
             task_log_handler = None
             success = False
             excluded = False
-            excluded_exception = None
-            build_artifacts = []
             try:
                 self.__logger.info('processing the task:\n%s', task)
                 os.makedirs(artifacts_dir)
                 task_log_handler = self.__init_task_logger(task_log_file)
                 self.__build_packages(task, task_dir, artifacts_dir)
-                build_artifacts = self.__upload_artifacts(
-                    task, artifacts_dir, task_log_file)
                 success = True
-            except BuildError as e:
+            except BuildError:
                 self.__logger.exception(
-                    'task %i build failed: %s.',
+                    'task %i build failed',
                     task.id,
-                    str(e),
                 )
-            except BuildExcluded as ee:
-                excluded_exception = ee
+            except BuildExcluded:
                 excluded = True
                 self.__logger.info(
-                    'task %i build excluded: %s',
+                    'task %i build excluded',
                     task.id,
-                    str(excluded_exception),
                 )
             except Exception as e:
                 self.__logger.exception(
-                    'task %i build failed: %s.',
+                    'task %i build failed',
                     task.id,
-                    str(e),
                 )
-                self.__sentry.capture_exception(e)
+                capture_exception(e)
             finally:
-                if not success:
-                    try:
-                        build_artifacts = self.__upload_artifacts(
-                            task, artifacts_dir, task_log_file)
-                    except Exception as e:
-                        self.__logger.exception(
-                            'Cannot upload task artifacts: %s.', e)
-                        self.__sentry.capture_exception(e)
-                    if excluded_exception is not None:
+                only_logs = (not (bool(filter_files(
+                    artifacts_dir, lambda f: f.endswith('.rpm')))))
+                notarized_artifacts = {}
+                if self._codenotary_enabled:
+                    (
+                        notarized_artifacts,
+                        non_notarized_artifacts,
+                    ) = self.__cas_notarize_artifacts(
+                        task,
+                        artifacts_dir,
+                    )
+                    self.__logger.debug(
+                        'List of notarized and not notarized artifacts:\n%s\n%s',
+                        pprint.pformat(notarized_artifacts),
+                        pprint.pformat(non_notarized_artifacts),
+                    )
+                    if non_notarized_artifacts:
+                        only_logs = True
+                        success = False
+                        self.__logger.error(
+                            'Cannot notarize following artifacts:\n%s',
+                            pprint.pformat(non_notarized_artifacts),
+                        )
+                build_artifacts = []
+                try:
+                    build_artifacts = self.__upload_artifacts(
+                        artifacts_dir, only_logs=only_logs)
+                except Exception:
+                    self.__logger.exception('Cannot upload task artifacts')
+                    build_artifacts = []
+                    success = False
+                finally:
+                    build_artifacts.append(
+                        self._pulp_uploader.upload_single_file(task_log_file)
+                    )
+
+                for artifact in build_artifacts:
+                    artifact.cas_hash = notarized_artifacts.get(artifact.path)
+
+                end_ts = datetime.datetime.utcnow()
+                delta = end_ts - self.__start_ts
+                self._build_stats.update({
+                    "build_node_task": {
+                        "start_ts": str(self.__start_ts),
+                        "end_ts": str(end_ts),
+                        "delta": str(delta),
+                    },
+                    **self.__builder.get_build_stats(),
+                })
+                try:
+                    if not success and excluded:
                         self.__report_excluded_task(
                             task, build_artifacts)
-                if not excluded:
-                    self.__report_done_task(
-                        task, success=success, artifacts=build_artifacts)
+                    else:
+                        self.__report_done_task(
+                            task, success=success, artifacts=build_artifacts)
+                except Exception:
+                    self.__logger.exception(
+                        'Cannot report task status to the main node')
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
                 self.__start_ts = None
+                self._build_stats = None
                 if os.path.exists(task_dir):
                     self.__logger.debug(
                         'cleaning up task build directory %s',
@@ -152,13 +211,30 @@ class BuildNodeBuilder(threading.Thread):
                     rm_sudo(task_dir)
                 self.__builder = None
 
+    @measure_stage("cas_notarize_artifacts")
+    def __cas_notarize_artifacts(
+        self,
+        task: Task,
+        artifacts_dir: str,
+    ) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+        (
+            notarized_artifacts,
+            non_notarized_artifacts,
+        ) = notarize_build_artifacts(
+            task,
+            artifacts_dir,
+            self._cas_wrapper,
+            self.__hostname,
+        )
+        return notarized_artifacts, non_notarized_artifacts
+
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
         Creates a suitable builder instance and builds RPM or Debian packages.
 
         Parameters
         ----------
-        task : dict
+        task : Task
             Build task information.
         task_dir : str
             Build task working directory path.
@@ -168,21 +244,15 @@ class BuildNodeBuilder(threading.Thread):
         self.__logger.info('building on the %s node', platform.node())
         builder_class = get_suitable_builder(task)
         self.__builder = builder_class(self.__config, self.__logger, task,
-                                       task_dir, artifacts_dir)
+                                       task_dir, artifacts_dir,
+                                       self._cas_wrapper)
         self.__builder.build()
 
-    def __upload_artifacts(self, task, artifacts_dir, task_log_file):
-        artifacts = self._pulp_uploader.upload(artifacts_dir)
-        build_stats = self.__builder.get_build_stats()
-        build_stats_path = os.path.join(artifacts_dir, 'build_stats.yml')
-        with open(build_stats_path, 'w') as fd:
-            fd.write(yaml.dump(build_stats))
-        artifacts.append(
-            self._pulp_uploader.upload_single_file(build_stats_path)
-        )
-        artifacts.append(
-            self._pulp_uploader.upload_single_file(task_log_file)
-        )
+    @measure_stage("upload")
+    def __upload_artifacts(self, artifacts_dir,
+                           only_logs: bool = False):
+        artifacts = self._pulp_uploader.upload(
+            artifacts_dir, only_logs=only_logs)
         return artifacts
 
     def __request_task(self):
@@ -196,13 +266,19 @@ class BuildNodeBuilder(threading.Thread):
         )
         if not task:
             return
+        if not task.get('is_secure_boot'):
+            task['is_secure_boot'] = False
         return Task(**task)
 
     def __report_excluded_task(self, task, artifacts):
         kwargs = {
             'task_id': task.id,
             'status': 'excluded',
-            'artifacts': [artifact.dict() for artifact in artifacts]
+            'artifacts': [artifact.dict() for artifact in artifacts],
+            'stats': self._build_stats,
+            'is_cas_authenticated': task.is_cas_authenticated,
+            'git_commit_hash': task.ref.git_commit_hash,
+            'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
             'build_done',
@@ -216,7 +292,11 @@ class BuildNodeBuilder(threading.Thread):
         kwargs = {
             'task_id': task.id,
             'status': 'done' if success else 'failed',
-            'artifacts': [artifact.dict() for artifact in artifacts]
+            'artifacts': [artifact.dict() for artifact in artifacts],
+            'stats': self._build_stats,
+            'is_cas_authenticated': task.is_cas_authenticated,
+            'git_commit_hash': task.ref.git_commit_hash,
+            'alma_commit_cas_hash': task.alma_commit_cas_hash,
         }
         self.__call_master(
             'build_done',
@@ -254,7 +334,13 @@ class BuildNodeBuilder(threading.Thread):
         else:
             session_method = self.__session.get
         try:
-            response = session_method(full_url, json=parameters)
+            response = session_method(
+                full_url, json=parameters,
+                timeout=self.__config.request_timeout
+            )
+            # Special case when build was already done
+            if response.status_code == requests.codes.conflict:
+                return {}
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RetryError:
@@ -292,7 +378,9 @@ class BuildNodeBuilder(threading.Thread):
         logging.Handler
             Task logging handler.
         """
-        handler = logging.FileHandler(log_file)
+        handler = logging.StreamHandler(
+            gzip.open(log_file, 'wt', encoding='utf-8'),
+        )
         handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s %(levelname)-8s]: "
                                       "%(message)s", "%H:%M:%S %d.%m.%y")

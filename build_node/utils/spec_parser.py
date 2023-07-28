@@ -17,8 +17,13 @@ import rpm
 from build_node.utils.rpm_utils import string_to_version, flag_to_string
 from build_node.ported import to_unicode, cmp
 
+
 __all__ = ["SpecParser", "PackageFeature", "ChangelogRecord", "SpecPatch",
-           "SpecSource"]
+           "SpecSource", "SpecParseError"]
+
+
+class SpecParseError(ValueError):
+    pass
 
 
 class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
@@ -360,7 +365,7 @@ class SpecParser(object):
                 except:
                     # seems we had no success on fixing file - raise original
                     # error
-                    raise rpm_error
+                    raise SpecParseError('Cannot parse spec') from rpm_error
                 finally:
                     if tmp_file:
                         tmp_file.close()

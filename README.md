@@ -1,7 +1,7 @@
 System overview 
 --
 
-AlmaLinux Build System Build Node - ALBS Node - is designed for the automated building of rpm/deb packages. It uses docker and docker-compose for local\production deployment. 
+AlmaLinux Build System Build Node - ALBS Node - is designed for the automated building of rpm packages. It uses docker and docker-compose for local\production deployment. 
 Build Node supports several types of architectures: x86_64, aarch64, ppc64le. The support of the architectures is provided by the [packages](https://repo.almalinux.org/build_system/8/) that were built for AlmaLinux Build Node specifically.
 
 Build Node requires this albs-* services:
@@ -9,12 +9,18 @@ Build Node requires this albs-* services:
 - AlmaLinux Build System Build Node (albs-node) - receives and performs a build task, sends the results as artifacts to PULP, informs web-server about results. 
 
 
-Build Node sends a request to the Web-Server. If there is an idle task (not started), Build Node receives back a build task to build packages. After the task is completed, Build Node uploads artifacts which are build logs and rpm/deb packages to the [Artifact Storage (PULP)](https://build.almalinux.org/pulp/content/builds/AlmaLinux-8-x86_64-22-br/). 
+Build Node sends a request to the Web-Server. If there is an idle task (not started), Build Node receives back a build task to build packages. After the task is completed, Build Node uploads artifacts which are build logs and rpm packages to the [Artifact Storage (PULP)](https://build.almalinux.org/pulp/content/builds/AlmaLinux-8-x86_64-22-br/). 
 
 Mentioned tools and libraries are required for ALBS Node to run in their current state:
  
+- Python 3 
+- Pulp
+- PostgreSQL 
 - Docker 
 - Docker-compose
+- Plumbum
+- Mock
+- Pbuilder
 
 Build Node flow 
 --
@@ -29,8 +35,8 @@ Build Node can manage multiple builds at the same time, max number of simultaneo
 
 The process:
 
-- Prepare a specially isolated environment. For the rpm, the [mock](https://github.com/rpm-software-management/mock) utility creates one. A Build Node receives a task from the Web-Server by requesting `/api/v1/build_node/get_task`, creates a mock-environment to build an rpm package, and sends artifacts to the Artifact Storage (PULP). For deb, pbuilder utility is used. 
-- Preparing the project source code for building. In the case of rpm, this means creating an src-rpm using a SPEC file, creating source tarball (in case it's missing from the repository), applying patches, and possibly other operations according to SPEC. In the case of deb, it is creating source tarball, applying patches, other operations according to debian/rules and packing the prepared set of source files. After that, all build artifacts are transferred (src.rpm, dsc and logs) to special directories.
+- Prepare a specially isolated environment. For the rpm package type, the [mock](https://github.com/rpm-software-management/mock) utility creates one. A Build Node receives a task from the Web-Server by requesting `/api/v1/build_node/get_task`, creates a mock-environment to build an rpm package, and sends artifacts to the Artifact Storage (PULP). 
+- Preparing the project source code for building. In the case of rpm, this means creating an src-rpm using a SPEC file, pre-unpacking the archive, applying patches, and possibly other operations according to SPEC. After that, all build artifacts are transfered (src.rpm, dsc and logs) to special directories.
 - The building of binary packages in a special environment based on the prepared source code from the previous stage. 
 - The transfer of all build artifacts (src.rpm, dsc and logs) takes place.
 

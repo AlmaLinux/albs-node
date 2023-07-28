@@ -26,7 +26,7 @@ class BaseYumConfig(object):
             if key == 'repositoryid':
                 continue
             elif key in ('assumeyes', 'best', 'enabled', 'gpgcheck',
-                         'obsoletes'):
+                         'obsoletes', 'module_hotfixes'):
                 cfg.set(section, key, BaseYumConfig.render_bool_option(value))
             elif key in ('debuglevel', 'retries'):
                 cfg.set(section, key, str(value))
@@ -192,10 +192,10 @@ class YumRepositoryConfig(BaseYumConfig):
 
     """Yum repository configuration generator"""
 
-    def __init__(self, repositoryid, name, baseurl=None, mirrorlist=None,
+    def __init__(self, repositoryid, name, priority, baseurl=None, mirrorlist=None,
                  enabled=True, failovermethod=None,
                  gpgcheck=None, gpgkey=None, username=None, password=None,
-                 sslverify=None):
+                 sslverify=None, module_hotfixes=None):
         """
         Yum repository initialization.
 
@@ -205,6 +205,8 @@ class YumRepositoryConfig(BaseYumConfig):
             A unique name for each repository, single word.
         name : str
             A human readable repository description.
+        priority : str
+            A repository priority
         baseurl : str or list or None
             A URL to the directory where 'repodata' directory is located.
             Multiple URLs could be provided as a list.

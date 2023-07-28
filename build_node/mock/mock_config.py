@@ -60,6 +60,7 @@ Which produces the following configuration file section:
     \"\"\"
 """
 
+import collections
 import copy
 from io import StringIO
 import hashlib
@@ -106,7 +107,7 @@ class MockConfig(object):
 
     def __init__(self, target_arch, legal_host_arches=None,
                  chroot_setup_cmd='install @buildsys-build', dist=None,
-                 releasever=None, files=None, yum_config=None, **kwargs):
+                 releasever=None, files=None, yum_config=None, basedir=None, **kwargs):
         """
         Mock configuration initialization.
 
@@ -132,6 +133,8 @@ class MockConfig(object):
             List of chroot files (config_opts['files']).
         yum_config : build_node.mock.yum_config.YumConfig
             Yum configuration.
+        basedir : str, optional
+            Mock basedir if want to override the default one (/var/lib/mock/).
 
         Raises
         ------
@@ -157,14 +160,22 @@ class MockConfig(object):
         self.__config_opts = {'target_arch': target_arch,
                               'legal_host_arches': legal_host_arches,
                               'chroot_setup_cmd': chroot_setup_cmd,
-                              'dist': dist, 'releasever': releasever}
+                              'dist': dist, 'releasever': releasever,
+                              'basedir': basedir}
         self.__config_opts.update(**kwargs)
+        self.__append_config_opts = collections.defaultdict(list)
         self.__files = {}
         if files:
             for chroot_file in files:
                 self.add_file(chroot_file)
         self.__plugins = {}
         self.__yum_config = yum_config
+
+    def append_config_opt(self, key: str, value: str):
+        self.__append_config_opts[key].append(value)
+
+    def set_config_opts(self, opts_dict: dict):
+        self.__config_opts.update(opts_dict)
 
     def add_module_install(self, module_name):
         """
@@ -276,7 +287,8 @@ class MockConfig(object):
         elif target_arch in ('i386', 'i586', 'i686'):
             return 'i386', 'i586', 'i686', 'x86_64'
         elif target_arch == 'noarch':
-            return 'i386', 'i586', 'i686', 'x86_64', 'noarch', 'aarch64', 'armhf'
+            return ('i386', 'i586', 'i686', 'x86_64', 'noarch', 'aarch64',
+                    'armhf', 'ppc64le', 's390x')
         elif target_arch == 'aarch64':
             return 'aarch64',
         # TODO: Investigate if 32-bit packages will really be able to be built on 64-bit ARM
@@ -284,6 +296,8 @@ class MockConfig(object):
             return 'aarch64', 'armhf', 'armhfp'
         elif target_arch in ('ppc64le', ):
             return 'ppc64le'
+        elif target_arch in ('s390x', ):
+            return 's390x'
         raise ValueError('there is no default_host_arches value for {0} '
                          'architecture'.format(target_arch))
 
@@ -299,7 +313,7 @@ class MockConfig(object):
         self.__yum_config = yum_config
 
     @staticmethod
-    def render_config_option(option, value):
+    def render_config_option(option, value, append=False):
         """
         Renders ``config_opts`` mock config definition.
 
@@ -309,6 +323,9 @@ class MockConfig(object):
             Option name.
         value : bool or int or str or list or tuple or None
             Option value. Warning: nested dictionaries aren't supported.
+        append : bool, optional
+            If true, option will be rendered as config_opts[key].append(value),
+            instead of config_opts[key] = value
 
         Returns
         -------
@@ -322,11 +339,14 @@ class MockConfig(object):
                 out += 'config_opts[{0}][{1}] = {2}\n'.\
                     format(option, to_mock_config_string(k),
                            to_mock_config_string(v))
+        elif append:
+            out += 'config_opts[{0}].append({1})\n'.\
+                format(option, to_mock_config_string(value))
         else:
             out += 'config_opts[{0}] = {1}\n'.\
                 format(option, to_mock_config_string(value))
         # it is needed til we use EL7 Build Server
-        out = out.replace('config_opts["use_bootstrap_container"] = True', 
+        out = out.replace('config_opts["use_bootstrap_container"] = True',
                 'config_opts["use_bootstrap_container"] = False')
         return out
 
@@ -353,6 +373,9 @@ class MockConfig(object):
                 if option == 'root' or value is None:
                     continue
                 fd.write(self.render_config_option(option, value))
+            for option, value_list in sorted(self.__append_config_opts.items()):
+                for value in value_list:
+                    fd.write(self.render_config_option(option, value, append=True))
             for plugin in self.__plugins.values():
                 fd.write(plugin.render_config())
             if self.__yum_config:

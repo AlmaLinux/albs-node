@@ -15,14 +15,18 @@ import sys
 import time
 from threading import Event
 
+import sentry_sdk
+
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
+from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.build_node_supervisor import BuilderSupervisor
+from build_node.mock.mock_environment import MockError
 from build_node.utils.file_utils import chown_recursive, rm_sudo
 from build_node.utils.config import locate_config_file
 from build_node.utils.log import configure_logger
-
+from build_node.utils.spec_parser import SpecParseError
 
 running = True
 
@@ -85,6 +89,24 @@ def init_working_dir(config):
         os.makedirs(config.mock_configs_storage_dir, 0o750)
 
 
+def init_sentry(config):
+    """
+    Initializes Sentry if dsn parameter is provided.
+
+    Parameters
+    ----------
+    config : BuildNodeConfig
+    """
+    if not config.sentry_dsn:
+        return
+    sentry_sdk.init(
+        dsn=config.sentry_dsn,
+        traces_sample_rate=config.sentry_traces_sample_rate,
+        environment=config.sentry_environment,
+        ignore_errors=[MockError, BuildError, BuildExcluded, SpecParseError],
+    )
+
+
 def main(sys_args):
     args_parser = init_args_parser()
     args = args_parser.parse_args(sys_args)
@@ -97,6 +119,7 @@ def main(sys_args):
         return 2
     configure_logger(args.verbose)
     init_working_dir(config)
+    init_sentry(config)
 
     node_terminated = Event()
     node_graceful_terminated = Event()
@@ -130,8 +153,17 @@ def main(sys_args):
     builder_supervisor = BuilderSupervisor(config, builders, node_terminated)
     builder_supervisor.start()
 
+    global running
     while running:
-        time.sleep(1)
+        time.sleep(10)
+        if all([b.is_alive() for b in builders]):
+            continue
+        if all([not b.is_alive() for b in builders]):
+            logging.error('All builders are dead, exiting')
+            for b in builders:
+                b.join(0.1)
+            builder_supervisor.join(1.)
+            return 1
 
 
 if __name__ == '__main__':
