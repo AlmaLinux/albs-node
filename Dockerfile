@@ -43,10 +43,7 @@ WORKDIR /build-node
 COPY requirements.txt /build-node/requirements.txt
 
 RUN python3 -m venv --system-site-packages env
-RUN /build-node/env/bin/pip install --upgrade pip && /build-node/env/bin/pip install -r requirements.txt && /build-node/env/bin/pip cache purge
-
-COPY ./build_node /build-node/build_node
-COPY almalinux_build_node.py /build-node/almalinux_build_node.py
+RUN cd /build-node && source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir
 
 RUN chown -R alt:alt /build-node /wait_for_it.sh /srv
 USER alt
@@ -55,4 +52,4 @@ USER alt
 # COPY ./tests /build-node/tests
 # RUN /build-node/env/bin/py.test tests
 
-CMD ["/build-node/env/bin/python", "/build-node/almalinux_build_node.py"]
+CMD ["/bin/bash", "-c", "source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_build_node.py"]
