@@ -1,5 +1,11 @@
 [buildnode]
-baseurl = https://repo.almalinux.org/build_system/8/$basearch/
+baseurl = https://repo.almalinux.org/build_system/9/$basearch/
 enabled = 0
 gpgcheck = 0
-name = Cloudlinux - 8 - BuildNode
+name = AlmaLinux - 9 - BuildNode
+
+[buildsystem]
+baseurl = https://build.almalinux.org/pulp/content/copr/eabdullin1-build_system-almalinux-9-$basearch-dr/
+enabled = 0
+gpgcheck = 0
+name = AlmaLinux - 9 - BuildSystem
