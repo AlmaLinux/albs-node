@@ -578,7 +578,7 @@ class BaseRPMBuilder(BaseBuilder):
                                      f'mock{suffix}.{task_id}.{ts}.cfg')
         with open(mock_cfg_file, 'w') as mock_cfg_fd:
             mock_cfg_fd.write(to_unicode(mock_result.mock_config))
-        if mock_result.srpm:
+        if mock_result.srpm and not self.task.built_srpm_url:
             # NOTE: artifacts saving function could be called two times (after
             #       src-RPM build and after RPMs build)
             srpm_file = os.path.split(mock_result.srpm)[1]
