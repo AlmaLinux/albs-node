@@ -60,7 +60,7 @@ MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
 class BaseRPMBuilder(BaseBuilder):
 
     def __init__(self, config, logger, task,
-                 task_dir, artifacts_dir, cas_wrapper):
+                 task_dir, artifacts_dir, immudb_wrapper):
         """
         RPM builder initialization.
 
@@ -76,12 +76,12 @@ class BaseRPMBuilder(BaseBuilder):
             Build task working directory.
         artifacts_dir : str
             Build artifacts (src-RPM, RPM(s), logs, etc) output directory.
-        cas_wrapper: CasWrapper
-            CasWrapper instance
+        immudb_wrapper: ImmudbWrapper
+            ImmudbWrapper instance
         """
         super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
                                              artifacts_dir)
-        self.cas_wrapper = cas_wrapper
+        self.immudb_wrapper = immudb_wrapper
         self.codenotary_enabled = config.codenotary_enabled
 
     @measure_stage('build_all')
@@ -157,12 +157,14 @@ class BaseRPMBuilder(BaseBuilder):
 
     @measure_stage("cas_source_authenticate")
     def cas_source_authenticate(self, git_sources_dir: str):
-        is_authenticated, commit_cas_hash = (
-            self.cas_wrapper.authenticate_source(
-                f'git://{git_sources_dir}')
+        auth_result = self.immudb_wrapper.authenticate_git_repo(git_sources_dir)
+        self.task.is_cas_authenticated = auth_result.get('verified', False)
+        self.task.alma_commit_cas_hash = (
+            auth_result.get('value', {})
+            .get('Metadata', {})
+            .get('git', {})
+            .get('Commit')
         )
-        self.task.is_cas_authenticated = is_authenticated
-        self.task.alma_commit_cas_hash = commit_cas_hash
 
     @measure_stage("build_srpm")
     def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,

@@ -2,7 +2,7 @@ import os
 import time
 import typing
 
-from cas_wrapper import CasWrapper
+from immudb_wrapper import ImmudbWrapper
 
 from build_node.models import Task
 from build_node.utils.file_utils import filter_files, hash_file, download_file
@@ -16,7 +16,7 @@ __all__ = [
 def notarize_build_artifacts(
     task: Task,
     artifacts_dir: str,
-    cas_client: CasWrapper,
+    immudb_client: ImmudbWrapper,
     build_host: str,
 ) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
 
@@ -79,24 +79,26 @@ def notarize_build_artifacts(
     rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
                          'sourcerpm')
 
-    try:
-        cas_client.ensure_login()
-    except Exception:
-        return notarized_artifacts, non_notarized_artifacts
-
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
         for artifact in to_notarize:
+            result = {}
             if artifact.endswith('.rpm'):
                 artifact_metadata = cas_metadata.copy()
                 rpm_header = get_rpm_metadata(artifact)
                 for field in rpm_header_fields:
                     artifact_metadata[field] = rpm_header[field]
-                notarized, cas_hash = cas_client.notarize_no_exc(
-                    artifact, metadata=artifact_metadata)
+                result = immudb_client.notarize_file(
+                    artifact,
+                    user_metadata=artifact_metadata,
+                )
             else:
-                notarized, cas_hash = cas_client.notarize_no_exc(
-                    artifact, metadata=cas_metadata)
+                result = immudb_client.notarize_file(
+                    artifact,
+                    user_metadata=cas_metadata,
+                )
+            notarized = result.get('verified', False)
+            cas_hash = result.get('value', {}).get('Hash')
 
             if not notarized:
                 non_notarized_artifacts.append(artifact)

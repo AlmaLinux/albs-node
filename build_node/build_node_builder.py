@@ -17,7 +17,7 @@ import random
 import threading
 import typing
 
-from cas_wrapper import CasWrapper
+from immudb_wrapper import ImmudbWrapper
 import requests
 import requests.adapters
 from requests.packages.urllib3.util.retry import Retry
@@ -70,7 +70,7 @@ class BuildNodeBuilder(threading.Thread):
         # current task builder object
         self.__builder = None
         self.__session = None
-        self._cas_wrapper = None
+        self._immudb_wrapper = None
         self._codenotary_enabled = self.__config.codenotary_enabled
         self._build_stats: typing.Optional[typing.Dict[str, typing.Dict[str, str]]] = None
         self._pulp_uploader = PulpRpmUploader(
@@ -88,9 +88,12 @@ class BuildNodeBuilder(threading.Thread):
                                 'bt-{0}.log'.format(self.name))
         self.__logger = self.init_thread_logger(log_file)
         if self._codenotary_enabled:
-            self._cas_wrapper = CasWrapper(
-                cas_api_key=self.__config.cas_api_key,
-                cas_signer_id=self.__config.cas_signer_id,
+            self._immudb_wrapper = ImmudbWrapper(
+                username=self.__config.immudb_username,
+                password=self.__config.immudb_password,
+                database=self.__config.immudb_database,
+                immudb_address=self.__config.immudb_address,
+                public_key_file=self.__config.immudb_public_key_file,
                 logger=self.__logger,
             )
         self.__logger.info('starting %s', self.name)
@@ -223,7 +226,7 @@ class BuildNodeBuilder(threading.Thread):
         ) = notarize_build_artifacts(
             task,
             artifacts_dir,
-            self._cas_wrapper,
+            self._immudb_wrapper,
             self.__hostname,
         )
         return notarized_artifacts, non_notarized_artifacts
@@ -245,7 +248,7 @@ class BuildNodeBuilder(threading.Thread):
         builder_class = get_suitable_builder(task)
         self.__builder = builder_class(self.__config, self.__logger, task,
                                        task_dir, artifacts_dir,
-                                       self._cas_wrapper)
+                                       self._immudb_wrapper)
         self.__builder.build()
 
     @measure_stage("upload")
