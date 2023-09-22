@@ -337,7 +337,14 @@ def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
         if not hasattr(dst, 'write'):
             dst_fd.close()
 
-    file_name = os.path.basename(urllib.parse.urlsplit(real_url)[2]).strip()
+    # using the original URL since that should come from the spec file itself
+    # and is actually known there. Problem arises when a site redirects around
+    # the url and the real_url ends up as ending in /v0.3.7 instead of
+    # project-0.3.7.tar.gz (or similar).
+    # Ultimately both cases here are wrong and this is inherently hard if you
+    # have to assume the url doesn't end in the filename you are expecting to
+    # download
+    file_name = os.path.basename(urllib.parse.urlsplit(url)[2]).strip()
     if isinstance(dst, str):
         if tmp_path:
             # rename the temporary file to a real file name if destination
