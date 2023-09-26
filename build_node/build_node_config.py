@@ -63,6 +63,8 @@ class BuildNodeConfig(BaseConfig):
         Git repositories cache locks directory.
     git_repos_cache_dir : str
         Git repositories cache directory.
+    git_extra_options : list of str
+        Git options to be passed to underlying git commands
     sentry_dsn : str
         Client key to send build data to Sentry.
     pulp_host : str
@@ -99,6 +101,7 @@ class BuildNodeConfig(BaseConfig):
             #       compatibility
             'git_cache_locks_dir': '/srv/alternatives/git_repos_cache/locks/',
             'git_repos_cache_dir': '/srv/alternatives/git_repos_cache/',
+            'git_extra_options': None,
             'native_support': DEFAULT_NATIVE_BUILDING,
             'arm64_support': DEFAULT_ARM64_BUILDING,
             'arm32_support': DEFAULT_ARM32_BUILDING,
@@ -135,6 +138,7 @@ class BuildNodeConfig(BaseConfig):
             'working_dir': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
             'git_repos_cache_dir': {'type': 'string', 'required': True},
+            'git_extra_options': {'type': 'list', 'required': False, 'nullable': True},
             'native_support': {'type': 'boolean', 'default': True},
             'arm64_support': {'type': 'boolean', 'default': False},
             'arm32_support': {'type': 'boolean', 'default': False},

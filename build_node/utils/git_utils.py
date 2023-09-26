@@ -739,7 +739,7 @@ class GitCacheError(Exception):
 class MirroredGitRepo(object):
 
     def __init__(self, repo_url, repos_dir, locks_dir, timeout=60,
-                 logger=None):
+                 git_command_extras=None, logger=None):
         """
         @type repo_url:   str or unicode
         @param repo_url:  Git repository URL.
@@ -750,6 +750,8 @@ class MirroredGitRepo(object):
             need the timeout.
         @type logger:     logging.Logger
         @param logger:    Logger instance to use (optional).
+        @type git_command_extras:  list of str
+        @param git_command_extras: List of extra command line options to be passed to git (optional)
         """
         if not isinstance(repo_url, str):
             raise ValueError("repo_url must be instance of str or unicode")
@@ -781,6 +783,8 @@ class MirroredGitRepo(object):
         self.__lock_file = os.path.join(locks_dir,
                                         "{0}.lock".format(self.__repo_hash))
         self.__fd = None
+
+        self.__git_command_extras = git_command_extras
 
     def clone_to(self, target_dir, branch=None):
         """
@@ -839,7 +843,7 @@ class MirroredGitRepo(object):
                 raise e
         return self
 
-    def __clone_repo(self, repo_url, target_dir, mirror=False, branch=None):
+    def __clone_repo(self, repo_url, target_dir, mirror=False, branch=None, git_opts=None):
         """
         Clones git repository to the specified directory.
 
@@ -849,10 +853,16 @@ class MirroredGitRepo(object):
         @param target_dir:    The name of a new directory to clone into.
         @type mirror:         bool
         @param mirror:        Set up a mirror of the source repository if True.
+        @type git_opts:       list of str
+        @param git_opts:      list of explicit options to append to git command (optional)
 
         @raise GitCacheError: If git-clone execution failed.
         """
         cmd = ["git", "clone"]
+        if self.__git_command_extras is not None:
+            cmd.extend( self.__git_command_extras )
+        if git_opts is not None:
+            cmd.extend( git_opts )
         if mirror:
             cmd.append("--mirror")
         cmd.extend((repo_url, target_dir))
