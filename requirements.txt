@@ -20,5 +20,5 @@ pyyaml==5.4.1
 filesplit==3.0.2
 pulpcore-client==3.14.3
 boto3==1.18.7
-pydantic==1.8.1
+pydantic==2.4.2
 git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.2#egg=immudb_wrapper
