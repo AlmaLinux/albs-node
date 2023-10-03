@@ -154,16 +154,21 @@ def main(sys_args):
     builder_supervisor.start()
 
     global running
+    exit_code = 0
     while running:
         time.sleep(10)
-        if all([b.is_alive() for b in builders]):
+        threads = builders + [builder_supervisor]
+        if all([t.is_alive() for t in threads]):
             continue
-        if all([not b.is_alive() for b in builders]):
+        if (all([not b.is_alive() for b in builders])
+                or not builder_supervisor.is_alive()):
             logging.error('All builders are dead, exiting')
+            running = False
+            exit_code = 1
             for b in builders:
                 b.join(0.1)
             builder_supervisor.join(1.)
-            return 1
+    return exit_code
 
 
 if __name__ == '__main__':
