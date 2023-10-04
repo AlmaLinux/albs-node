@@ -16,7 +16,7 @@ lmdb==1.2.1
 #rpm Conflicts with python3-rpm
 pyicu==2.7.4
 pebble==4.6.3
-pyyaml==5.4.1
+pyyaml==6.0.1
 filesplit==3.0.2
 pulpcore-client==3.14.3
 boto3==1.18.7
