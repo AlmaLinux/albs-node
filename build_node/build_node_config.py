@@ -7,10 +7,10 @@ CloudLinux Build System build node configuration storage.
 """
 
 import os
+import platform
 
 from build_node.utils.config import BaseConfig
 
-DEFAULT_BASE_ARCH = 'x86_64'
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
@@ -121,7 +121,7 @@ class BuildNodeConfig(BaseConfig):
             's3_bucket': DEFAULT_S3_BUCKET,
             's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
             's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
-            'base_arch': DEFAULT_BASE_ARCH,
+            'base_arch': platform.machine(),
             'immudb_username': None,
             'immudb_password': None,
             'immudb_database': None,
