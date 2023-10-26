@@ -211,7 +211,7 @@ class BuildNodeBuilder(threading.Thread):
                     # NOTE: sometimes source files have weird permissions
                     #       which makes their deletion merely impossible
                     #       without root permissions
-                    # rm_sudo(task_dir)
+                    rm_sudo(task_dir)
                 self.__builder = None
 
     @measure_stage("cas_notarize_artifacts")
