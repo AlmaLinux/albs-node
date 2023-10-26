@@ -211,7 +211,7 @@ class BuildNodeBuilder(threading.Thread):
                     # NOTE: sometimes source files have weird permissions
                     #       which makes their deletion merely impossible
                     #       without root permissions
-                    rm_sudo(task_dir)
+                    # rm_sudo(task_dir)
                 self.__builder = None
 
     @measure_stage("cas_notarize_artifacts")
@@ -332,7 +332,10 @@ class BuildNodeBuilder(threading.Thread):
     ):
         full_url = urllib.parse.urljoin(
             self.__config.master_url, f'build_node/{endpoint}')
-        if endpoint == 'build_done':
+        if endpoint in (
+            'build_done',
+            'get_task'
+        ):
             session_method = self.__session.post
         else:
             session_method = self.__session.get
