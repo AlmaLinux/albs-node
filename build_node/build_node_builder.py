@@ -332,7 +332,10 @@ class BuildNodeBuilder(threading.Thread):
     ):
         full_url = urllib.parse.urljoin(
             self.__config.master_url, f'build_node/{endpoint}')
-        if endpoint == 'build_done':
+        if endpoint in (
+            'build_done',
+            'get_task'
+        ):
             session_method = self.__session.post
         else:
             session_method = self.__session.get
