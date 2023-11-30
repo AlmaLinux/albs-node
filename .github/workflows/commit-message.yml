@@ -12,7 +12,7 @@ jobs:
     name: Check Commit Message
     runs-on: ubuntu-latest
     steps:
-      - name: Check Line Length
+      - name: Check commit lines length
         uses: gsactions/commit-message-checker@v2
         with:
           pattern: '^.{4,72}'
@@ -20,10 +20,10 @@ jobs:
           error: 'The maximum line length of 72 characters is exceeded.'
           excludeDescription: 'true'
           excludeTitle: 'true'
-      - name: Check for Resolves / Fixes
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check for Resolves/Fixes links in PR description
         uses: gsactions/commit-message-checker@v2
         with:
-          pattern: '(Resolves|Fixes) AlmaLinux\/build-system\#[0-9]+$'
+          pattern: '(Resolves|Fixes):? (?:https:\/\/github.com\/)?AlmaLinux\/build-system(\/issues\/|#)[0-9]+$'
           error: 'You need at least one "Resolves|Fixes: <issue link>" line.'
-          excludeTitle: 'true'
-          excludeDescription: 'true'
