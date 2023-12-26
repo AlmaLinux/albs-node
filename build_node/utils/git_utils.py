@@ -859,6 +859,13 @@ class MirroredGitRepo(object):
         @raise GitCacheError: If git-clone execution failed.
         """
         cmd = ["git", "clone"]
+        env = {'GIT_TERMINAL_PROMPT': '0'}
+
+        if 'GIT_SSL_NO_VERIFY' in os.environ:
+            # value doesn't matter
+            # git doesn't verify if this env var exists
+            env['GIT_SSL_NO_VERIFY'] = '1'
+
         if self.__git_command_extras is not None:
             cmd.extend( self.__git_command_extras )
         if git_opts is not None:
@@ -866,10 +873,12 @@ class MirroredGitRepo(object):
         if mirror:
             cmd.append("--mirror")
         cmd.extend((repo_url, target_dir))
+        self.__logger.debug("__clone_repo: environment variables {0}".
+                            format(env))
         git_clone = subprocess.Popen(cmd, cwd=self.__base_dir,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT,
-                                     env={'GIT_TERMINAL_PROMPT': '0'})
+                                     env=env)
         stdout, _ = git_clone.communicate()
         status = git_clone.returncode
         if status != 0:
@@ -910,6 +919,13 @@ class MirroredGitRepo(object):
 
         @raise GitCacheError: If git-fetch execution failed.
         """
+
+        # Unlike __clone_repo(), no need to adjust environment variable
+        # because env var is not passed to Popen(). Popen inherits os.environ
+        # if env is not specified.
+        self.__logger.debug("__update_repo: environment variables {0}".
+                            format(env))
+
         git_fetch = subprocess.Popen(["git", "fetch", "--prune"],
                                      cwd=self.__repo_dir,
                                      stdout=subprocess.PIPE,
