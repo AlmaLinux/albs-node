@@ -1,11 +1,12 @@
 import os
 import time
-import typing
+from logging import Logger
+from typing import Dict, List, Optional, Tuple
 
 from immudb_wrapper import ImmudbWrapper
 
 from build_node.models import Task
-from build_node.utils.file_utils import filter_files, hash_file, download_file
+from build_node.utils.file_utils import download_file, filter_files, hash_file
 from build_node.utils.rpm_utils import get_rpm_metadata
 
 __all__ = [
@@ -18,13 +19,16 @@ def notarize_build_artifacts(
     artifacts_dir: str,
     immudb_client: ImmudbWrapper,
     build_host: str,
-) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
+    logger: Optional[Logger] = None,
+) -> Tuple[Dict[str, str], List[str]]:
 
     srpm_path = None
     artifact_paths = []
     for artifact_path in filter_files(
         artifacts_dir,
-        lambda x: any((x.endswith(type) for type in ('.log', '.cfg', '.rpm'))),
+        lambda x: any(
+            (x.endswith(_type) for _type in ('.log', '.cfg', '.rpm'))
+        ),
     ):
         if artifact_path.endswith('.src.rpm'):
             srpm_path = artifact_path
@@ -50,15 +54,15 @@ def notarize_build_artifacts(
         srpm_filename = 'initial.src.rpm'
         try:
             srpm_path = download_file(
-                task.ref.url, os.path.join(artifacts_dir, srpm_filename))
+                task.ref.url, os.path.join(artifacts_dir, srpm_filename)
+            )
         except:
             pass
         if srpm_path:
             hdr = get_rpm_metadata(srpm_path)
             epoch = hdr['epoch'] if hdr['epoch'] else '0'
             srpm_nevra = (
-                f"{epoch}:{hdr['name']}-{hdr['version']}-"
-                f"{hdr['release']}.src"
+                f"{epoch}:{hdr['name']}-{hdr['version']}-{hdr['release']}.src"
             )
             if task.srpm_hash:
                 srpm_sha256 = task.srpm_hash
@@ -76,34 +80,43 @@ def notarize_build_artifacts(
     max_notarize_retries = 5
     to_notarize = artifact_paths
     non_notarized_artifacts = artifact_paths
-    rpm_header_fields = ('name', 'epoch', 'version', 'release', 'arch',
-                         'sourcerpm')
+    rpm_header_fields = (
+        'name',
+        'epoch',
+        'version',
+        'release',
+        'arch',
+        'sourcerpm',
+    )
 
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
         for artifact in to_notarize:
             result = {}
+            artifact_metadata = {}
             if artifact.endswith('.rpm'):
                 artifact_metadata = cas_metadata.copy()
                 rpm_header = get_rpm_metadata(artifact)
                 for field in rpm_header_fields:
                     artifact_metadata[field] = rpm_header[field]
-                result = immudb_client.notarize_file(
-                    artifact,
-                    user_metadata=artifact_metadata,
-                )
-            else:
-                result = immudb_client.notarize_file(
-                    artifact,
-                    user_metadata=cas_metadata,
-                )
+            result = immudb_client.notarize_file(
+                artifact,
+                user_metadata=(
+                    artifact_metadata if artifact_metadata else cas_metadata
+                ),
+            )
             notarized = result.get('verified', False)
             cas_hash = result.get('value', {}).get('Hash')
 
+            notarized_artifacts[artifact] = cas_hash
             if not notarized:
                 non_notarized_artifacts.append(artifact)
-            else:
-                notarized_artifacts[artifact] = cas_hash
+                if logger and 'error' in result:
+                    logger.error(
+                        'Cannot notarize artifact: %s\nError: %s',
+                        artifact,
+                        result['error'],
+                    )
 
         if non_notarized_artifacts:
             to_notarize = non_notarized_artifacts
