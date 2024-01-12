@@ -142,14 +142,20 @@ class BuildNodeBuilder(threading.Thread):
                 only_logs = (not (bool(filter_files(
                     artifacts_dir, lambda f: f.endswith('.rpm')))))
                 notarized_artifacts = {}
+                non_notarized_artifacts = []
                 if self._codenotary_enabled:
-                    (
-                        notarized_artifacts,
-                        non_notarized_artifacts,
-                    ) = self.__cas_notarize_artifacts(
-                        task,
-                        artifacts_dir,
-                    )
+                    try:
+                        (
+                            notarized_artifacts,
+                            non_notarized_artifacts,
+                        ) = self.__cas_notarize_artifacts(
+                            task,
+                            artifacts_dir,
+                        )
+                    except Exception:
+                        success = False
+                        only_logs = True
+                        self.__logger.exception('Cannot notarize artifacts:')
                     self.__logger.debug(
                         'List of notarized and not notarized artifacts:\n%s\n%s',
                         pprint.pformat(notarized_artifacts),
@@ -220,16 +226,13 @@ class BuildNodeBuilder(threading.Thread):
         task: Task,
         artifacts_dir: str,
     ) -> typing.Tuple[typing.Dict[str, str], typing.List[str]]:
-        (
-            notarized_artifacts,
-            non_notarized_artifacts,
-        ) = notarize_build_artifacts(
-            task,
-            artifacts_dir,
-            self._immudb_wrapper,
-            self.__hostname,
+        return notarize_build_artifacts(
+            task=task,
+            artifacts_dir=artifacts_dir,
+            immudb_client=self._immudb_wrapper,
+            build_host=self.__hostname,
+            logger=self.__logger,
         )
-        return notarized_artifacts, non_notarized_artifacts
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
