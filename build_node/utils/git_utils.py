@@ -923,9 +923,6 @@ class MirroredGitRepo(object):
         # Unlike __clone_repo(), no need to adjust environment variable
         # because env var is not passed to Popen(). Popen inherits os.environ
         # if env is not specified.
-        self.__logger.debug("__update_repo: environment variables {0}".
-                            format(env))
-
         git_fetch = subprocess.Popen(["git", "fetch", "--prune"],
                                      cwd=self.__repo_dir,
                                      stdout=subprocess.PIPE,
