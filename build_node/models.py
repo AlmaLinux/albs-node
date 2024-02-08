@@ -17,9 +17,9 @@ class TaskRepo(BaseModel):
 class TaskRef(BaseModel):
 
     url: str
-    git_ref: typing.Optional[str]
+    git_ref: typing.Optional[str] = None
     ref_type: int
-    git_commit_hash: typing.Optional[str]
+    git_commit_hash: typing.Optional[str] = None
 
 
 class TaskCreatedBy(BaseModel):
@@ -47,13 +47,13 @@ class Task(BaseModel):
     arch: str
     ref: TaskRef
     build_id: int
-    alma_commit_cas_hash: typing.Optional[str]
+    alma_commit_cas_hash: typing.Optional[str] = None
     is_cas_authenticated: bool = False
     platform: TaskPlatform
     created_by: TaskCreatedBy
     repositories: typing.List[TaskRepo]
-    built_srpm_url: typing.Optional[str]
-    srpm_hash: typing.Optional[str]
+    built_srpm_url: typing.Optional[str] = None
+    srpm_hash: typing.Optional[str] = None
     is_secure_boot: bool
 
     def is_srpm_build_required(self):
