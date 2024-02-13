@@ -47,8 +47,4 @@ RUN cd /build-node && source env/bin/activate && pip3 install --upgrade pip && p
 RUN chown -R alt:alt /build-node /wait_for_it.sh /srv
 USER alt
 
-# FIXME:
-# COPY ./tests /build-node/tests
-# RUN /build-node/env/bin/py.test tests
-
 CMD ["/bin/bash", "-c", "source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_build_node.py"]

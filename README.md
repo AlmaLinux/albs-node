@@ -1,6 +1,8 @@
 System overview 
 --
 
+[![badges](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/maccelf/fc7bacd03455d19a15024e7ae1c29e24/raw/build-node-badge__master.json)](https://github.com/AlmaLinux/albs-node/blob/master/tests/README.md)
+
 AlmaLinux Build System Build Node - ALBS Node - is designed for the automated building of rpm packages. It uses docker and docker-compose for local\production deployment. 
 Build Node supports several types of architectures: x86_64, aarch64, ppc64le. The support of the architectures is provided by the [packages](https://repo.almalinux.org/build_system/8/) that were built for AlmaLinux Build Node specifically.
 
