@@ -19,10 +19,9 @@ Mentioned tools and libraries are required for ALBS Node to run in their current
 - Pulp
 - PostgreSQL 
 - Docker 
-- Docker-compose
+- Docker compose
 - Plumbum
 - Mock
-- Pbuilder
 
 Build Node flow 
 --
@@ -49,9 +48,9 @@ Running using docker-compose
 You can start the system using the Docker Compose tool.
 
 Pre-requisites:
-- `docker` and `docker-compose` tools are installed and set up;
+- `docker` and `docker-compose-plugin` tools are installed and set up;
 
-To start the system, run the following command: `docker-compose up -d`.  To rebuild images after your local changes, just run `docker-compose up -d --build`.
+To start the system, run the following command: `docker compose up -d`.  To rebuild images after your local changes, just run `docker compose up -d --build`.
 
 
 Reporing issues 

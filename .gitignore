@@ -192,6 +192,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-# Ignore configs for docker-compose deploy
-node-config/castor/*.yml

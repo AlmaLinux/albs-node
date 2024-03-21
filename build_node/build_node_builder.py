@@ -24,7 +24,7 @@ from requests.packages.urllib3.util.retry import Retry
 from sentry_sdk import capture_exception
 
 from build_node import constants
-from build_node.builders import get_suitable_builder
+from build_node.builders.base_rpm_builder import BaseRPMBuilder
 from build_node.builders.base_builder import measure_stage
 from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.uploaders.pulp import PulpRpmUploader
@@ -248,8 +248,7 @@ class BuildNodeBuilder(threading.Thread):
             Build artifacts storage directory path.
         """
         self.__logger.info('building on the %s node', platform.node())
-        builder_class = get_suitable_builder(task)
-        self.__builder = builder_class(self.__config, self.__logger, task,
+        self.__builder = BaseRPMBuilder(self.__config, self.__logger, task,
                                        task_dir, artifacts_dir,
                                        self._immudb_wrapper)
         self.__builder.build()

@@ -12,6 +12,7 @@ import gnupg
 import plumbum
 
 from build_node.errors import ConfigurationError
+from build_node.utils.file_utils import normalize_path
 
 
 __all__ = ['init_gpg', 'scan_pgp_info_from_file', 'verify_pgp_key_password',
@@ -28,7 +29,7 @@ def init_gpg():
         Initialized gpg wrapper.
     """
     gpg = gnupg.GPG(gpgbinary='/usr/bin/gpg2',
-                    keyring='/home/alt/.gnupg/pubring.kbx')
+                    keyring=normalize_path('~/.gnupg/pubring.kbx'))
     return gpg
 
 
