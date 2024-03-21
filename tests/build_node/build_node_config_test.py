@@ -95,10 +95,3 @@ class TestBuildNodeConfig(TestCase):
             self.default_config.mock_configs_storage_dir,
             os.path.join(self.working_dir, 'mock_configs'),
         )
-
-    def test_pbuilder_configs_storage_dir(self):
-        """BuildNodeConfig provides pbuilder_configs_storage_dir attribute"""
-        self.assertEqual(
-            self.default_config.pbuilder_configs_storage_dir,
-            os.path.join(self.working_dir, 'pbuilder_envs'),
-        )

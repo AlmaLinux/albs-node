@@ -1,0 +1,9 @@
+# A workaround to make the report with the right root package name
+# https://github.com/nedbat/coveragepy/issues/613#issuecomment-399708687
+
+[run]
+source = .
+
+[report]
+skip_empty = True
+include = build_node/*

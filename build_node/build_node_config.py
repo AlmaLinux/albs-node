@@ -34,6 +34,7 @@ DEFAULT_S3_REGION = ''
 DEFAULT_S3_BUCKET = ''
 DEFAULT_S3_SECRET_ACCESS_KEY = ''
 DEFAULT_S3_ACCESS_KEY_ID = ''
+DEFAULT_JWT_TOKEN = 'test_jwt'
 
 __all__ = ['BuildNodeConfig']
 
@@ -127,7 +128,8 @@ class BuildNodeConfig(BaseConfig):
             'immudb_database': None,
             'immudb_address': None,
             'immudb_public_key_file': None,
-            'request_timeout': DEFAULT_REQUEST_TIMEOUT
+            'request_timeout': DEFAULT_REQUEST_TIMEOUT,
+            'jwt_token': DEFAULT_JWT_TOKEN,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -157,7 +159,7 @@ class BuildNodeConfig(BaseConfig):
             's3_region': {'type': 'string', 'nullable': False},
             's3_access_key_id': {'type': 'string', 'nullable': False},
             's3_secret_access_key': {'type': 'string', 'nullable': False},
-            'jwt_token': {'type': 'string', 'nullable': True},
+            'jwt_token': {'type': 'string', 'required': True},
             'immudb_username': {'type': 'string', 'nullable': True},
             'immudb_password': {'type': 'string', 'nullable': True},
             'immudb_database': {'type': 'string', 'nullable': True},
@@ -185,14 +187,3 @@ class BuildNodeConfig(BaseConfig):
         str
         """
         return os.path.join(self.working_dir, 'mock_configs')
-
-    @property
-    def pbuilder_configs_storage_dir(self):
-        """
-        Pbuilder environments storage directory
-
-        Returns
-        -------
-        str
-        """
-        return os.path.join(self.working_dir, 'pbuilder_envs')

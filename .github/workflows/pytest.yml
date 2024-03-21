@@ -13,21 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         name: Check out repository
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: isbang/compose-action@v1.5.1
-        name: Run docker-compose
-        with:
-          # Use this if you change something in Dockerfile
-          # up-flags: --build --no-deps
-          up-flags: "--pull always --no-build --no-deps"
-          down-flags: "--volumes"
       - name: Run unit tests (pytest)
-        run: docker-compose run -v /tmp:/tmp --no-deps build_node bash -o pipefail -c 'source
-          env/bin/activate && pip3 install -r requirements.txt &&
-          pytest -vv --cov-report term-missing:skip-covered
-          --cov-report xml:/tmp/coverage.xml --junitxml=/tmp/pytest.xml --cov=build_node
-          tests/ | tee /tmp/pytest-coverage.txt'
+        run: docker compose run -v /tmp:/tmp --rm build_node pytest -v
+          --cov --cov-report xml:/tmp/coverage.xml --junitxml=/tmp/pytest.xml
+          --cov-report term-missing:skip-covered | tee /tmp/pytest-coverage.txt
       - name: Pytest coverage comment
         uses: MishaKav/pytest-coverage-comment@main
         id: coverageComment

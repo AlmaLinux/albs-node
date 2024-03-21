@@ -1,13 +1,10 @@
-version: "3.9"
 services:
   build_node:
-    image: quay.io/almalinuxorg/albs-node:latest
+    image: albs-node:latest
+    build:
+      context: .
     privileged: true
-    command: "bash -c 'source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_build_node.py -v'"
-    restart: on-failure
+    command: "python3 almalinux_build_node.py -v"
     volumes:
-      - "./node-config:/home/alt/.config"
-      - "./requirements.txt:/build-node/requirements.txt"
-      - "./build_node:/build-node/build_node"
-      - "./almalinux_build_node.py:/build-node/almalinux_build_node.py"
-      - "./tests:/build-node/tests"
+      - ".:/build-node"
+      - "./node-config/castor/build_node.yml:/root/.config/castor/build_node.yml"

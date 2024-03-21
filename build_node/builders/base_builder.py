@@ -377,14 +377,3 @@ class BaseBuilder(object):
         build_node.mock.supervisor.MockSupervisor
         """
         return node_globals.MOCK_SUPERVISOR
-
-    @property
-    def pbuilder_supervisor(self):
-        """
-        Pbuilder chroot environments supervisor.
-
-        Returns
-        -------
-        from build_node.pbuilder.pbuilder_environment.PbuilderSupervisor
-        """
-        return node_globals.PBUILDER_SUPERVISOR
