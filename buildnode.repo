@@ -1,5 +1,5 @@
 [buildsystem]
-baseurl = https://repo.almalinux.org/build_system/9/$basearch/
+name = AlmaLinux $releasever - BuildSystem
+baseurl = https://repo.almalinux.org/build_system/$releasever/$basearch/
 enabled = 1
 gpgcheck = 0
-name = AlmaLinux 9 - BuildSystem
