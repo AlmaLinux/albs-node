@@ -137,7 +137,7 @@ def build_log_hangup(line):
         Tuple of `MOCK_ERR_BUILD_HANGUP` and a human friendly error description
         or None if there is no error found.
     """
-    regex = r'line\s+\d+:\s+\d+\s+(?i)hangup\s+.*?(?i)php'
+    regex = r'(?i)line\s+\d+:\s+\d+\s+hangup\s+.*?php'
     template = 'build is hanged-up (probably a build node was overloaded)'
     return check_error_pattern(regex, template, MOCK_ERR_BUILD_HANGUP, line)
 

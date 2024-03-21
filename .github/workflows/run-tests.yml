@@ -1,0 +1,76 @@
+name: Run Tests
+on:
+  push:
+    branches: [master]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        # https://github.com/marketplace/actions/docker-setup-buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Image
+        # https://github.com/marketplace/actions/build-and-push-docker-images
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Pytest
+        id: pytest
+        run: |
+          docker compose run --rm build_node bash -c "
+            pytest -v --cov \
+              --cov-report=json:pytest-report.json \
+              --cov-report=term | tee pytest-report.txt"
+
+          python -c "
+          import os, json
+          coverage = json.load(open('pytest-report.json'))['totals']['percent_covered_display']
+          print(f'percent_covered={coverage}', file=open(os.environ['GITHUB_OUTPUT'], 'a'))"
+
+      - name: Create Coverage Badge
+        # https://github.com/marketplace/actions/dynamic-badges
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+           auth: ${{ secrets.GIST_SECRET }}
+           gistID: fc7bacd03455d19a15024e7ae1c29e24
+           filename: build-node-badge__master.json
+           label: Test Coverage
+           message: ${{ steps.pytest.outputs.percent_covered }}%
+           valColorRange: ${{ steps.pytest.outputs.percent_covered }}
+           minColorRange: 30
+           maxColorRange: 60
+           namedLogo: pytest
+
+      - name: Publish Job Summary
+        run: |
+          {
+            printf "## Test Results\n\n"
+            printf '<details><summary>Click to expand</summary>\n'
+            printf '\n```\n'
+            awk 'NR == 1 {next}; /^-+ coverage:/ {exit}; {print}' pytest-report.txt
+            printf '\n```\n'
+            printf '</details>\n\n'
+
+            printf "## Code Coverage\n\n"
+            printf '<details><summary>Click to expand</summary>\n'
+            printf '\n```\n'
+            awk '/^-+ coverage:/, /^TOTAL/' pytest-report.txt
+            printf '\n```\n'
+            printf '</details>\n\n'
+          } > $GITHUB_STEP_SUMMARY

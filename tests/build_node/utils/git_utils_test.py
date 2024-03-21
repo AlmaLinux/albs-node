@@ -208,8 +208,10 @@ class TestGitLsRemote(GitUtilsShellTest):
             self.__verify_git_args(call, repo_path)
 
     def __verify_git_args(self, call, repo_path):
-        self.assertDictContainsSubset(
-            {'LANG': 'C'}, call['env'], msg='git must be called with C locale'
+        self.assertEqual(
+            call['env'].get('LANG'),
+            'C',
+            msg='git must be called with C locale'
         )
         self.assertEqual(
             call['argv'][1],

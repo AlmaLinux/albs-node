@@ -1,0 +1,65 @@
+name: Preflight Summary
+on:
+  workflow_run:
+    workflows: [Preflight]
+    types: [completed]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  submit-summary:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+
+      - name: Download Preflight artifacts
+        # https://github.com/marketplace/actions/download-workflow-artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          name: preflight-reports
+          run_id: ${{ github.event.workflow_run.id }}
+
+      - name: Load Environment
+        run: cat environment.txt | tee -a $GITHUB_ENV
+
+      - name: Generate Test Summary
+        # https://github.com/marketplace/actions/junit-test-dashboard
+        uses: test-summary/action@v2
+        with:
+          paths: pytest-report.xml
+          output: test-summary.md
+
+      - name: Generate Coverage Summary
+        # https://github.com/marketplace/actions/code-coverage-summary
+        # Generates code-coverage-results.md
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: pytest-coverage.xml
+          badge: false
+          hide_branch_rate: true
+          hide_complexity: true
+          indicators: false
+          format: markdown
+          output: file
+
+      - name: Generate Preflight Summary
+        run: |
+          {
+            JOB_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${{github.event.workflow_run.id }}"
+            printf "[%s]($JOB_URL \"Go to Job Summary\")\n\n" "$(< test-summary.md)"
+            printf "**Code Coverage Summary**\n\n"
+            cat code-coverage-results.md
+            printf "\nView full reports on the [Job Summary]($JOB_URL \"Go to Job Summary\") page\n"
+          } > preflight-report.md
+
+      - name: Comment PR
+        # https://github.com/marketplace/actions/comment-pull-request
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: preflight-report.md
+          comment_tag: preflight_summary
+          pr_number: ${{ env.PR_NUMBER }}
