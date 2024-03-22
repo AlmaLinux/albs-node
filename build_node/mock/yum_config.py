@@ -7,7 +7,7 @@ Yum section configuration of a mock configuration file.
 """
 
 
-from configparser import SafeConfigParser
+from configparser import ConfigParser
 from io import StringIO
 
 
@@ -20,7 +20,7 @@ class BaseYumConfig(object):
 
     @staticmethod
     def render_config_section(section, options):
-        cfg = SafeConfigParser()
+        cfg = ConfigParser()
         cfg.add_section(section)
         for key, value in sorted(options.items()):
             if key == 'repositoryid':

@@ -1,0 +1,36 @@
+name: Pull Request Checks
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check-pr-message:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Check the PR title and description
+        run: |
+          errors=
+
+          if grep -qE '^.{73,}$' <<< "${{ github.event.pull_request.title }}"; then
+            printf "ERROR: The PR title is longer than 72 characters:\n"
+            printf "  > ${{ github.event.pull_request.title }}\n"
+            errors=true
+          fi
+
+          issue_regex='(Resolves|Fixes):? +(https:\/\/github.com\/)?AlmaLinux\/build-system(\/issues\/|#)[0-9]+'
+          if ! grep -qE "$issue_regex" <<< "${{ github.event.pull_request.body }}"; then
+            printf "ERROR: You need at least one \"Resolves|Fixes: <issue link>\" line.\n"
+            errors=true
+          fi
+
+          if [[ $errors == true ]]; then
+            exit 2
+          fi

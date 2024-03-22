@@ -1,0 +1,100 @@
+name: Preflight
+on: [pull_request]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  check-commit-message:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check commit message
+        run: |
+          errors=
+
+          readarray -t long_lines < \
+            <(git log -1 --pretty=format:%B ${{ github.event.pull_request.head.sha }} | grep -E '^.{73,}$')
+          if [[ ${#long_lines[@]} -ne 0 ]]; then
+            printf "ERROR: The following lines are longer than 72 characters:\n"
+            printf "  > %s\n" "${long_lines[@]}"
+            errors=true
+          fi
+
+          if [[ $errors == true ]]; then
+            exit 2
+          fi
+
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      REPORTS_DIR: .preflight-reports
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        # https://github.com/marketplace/actions/docker-setup-buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Image
+        # https://github.com/marketplace/actions/build-and-push-docker-images
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Pytest
+        run: |
+          mkdir $REPORTS_DIR
+          docker compose run --rm build_node bash -c "
+            pytest -v --cov \
+              --junit-xml=$REPORTS_DIR/pytest-report.xml \
+              --cov-report=xml:$REPORTS_DIR/pytest-coverage.xml \
+              --cov-report=term | tee $REPORTS_DIR/pytest-report.txt"
+
+      - name: Save environment
+        run: |
+          {
+            echo "PR_NUMBER=${{ github.event.number }}"
+          } > $REPORTS_DIR/environment.txt
+
+      - name: Upload Pytest reports
+        # https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-reports
+          path: ${{ env.REPORTS_DIR }}
+          compression-level: 9
+          retention-days: 1
+
+      - name: Publish Job Summary
+        run: |
+          {
+            printf "## Test Results\n\n"
+            printf '<details><summary>Click to expand</summary>\n'
+            printf '\n```\n'
+            awk 'NR == 1 {next}; /^-+ generated xml file:/ {exit}; {print}' \
+              $REPORTS_DIR/pytest-report.txt
+            printf '\n```\n'
+            printf '</details>\n\n'
+
+            printf "## Code Coverage\n\n"
+            printf '<details><summary>Click to expand</summary>\n'
+            printf '\n```\n'
+            awk '/^-+ coverage:/, /^TOTAL/' \
+              $REPORTS_DIR/pytest-report.txt
+            printf '\n```\n'
+            printf '</details>\n\n'
+          } > $GITHUB_STEP_SUMMARY
