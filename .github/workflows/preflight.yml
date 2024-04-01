@@ -32,7 +32,7 @@ jobs:
             exit 2
           fi
 
-  pytest:
+  preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -46,7 +46,7 @@ jobs:
         # https://github.com/marketplace/actions/docker-setup-buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Image
+      - name: Build Docker image
         # https://github.com/marketplace/actions/build-and-push-docker-images
         uses: docker/build-push-action@v5
         with:
@@ -55,14 +55,76 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Pytest
+      - name: Prepare working directory
+        run: mkdir -p $REPORTS_DIR
+
+      - name: Get changed .py files
+        # https://github.com/marketplace/actions/paths-changes-filter
+        uses: dorny/paths-filter@v3
+        id: changed-files
+        with:
+          list-files: shell
+          filters: |
+            py:
+              - added|modified: '**/*.py'
+            src:
+              - added|modified: 'build_node/**/*.py'
+              - added|modified: '*.py'
+
+      - name: Run pytest
         run: |
-          mkdir $REPORTS_DIR
           docker compose run --rm build_node bash -c "
             pytest -v --cov \
               --junit-xml=$REPORTS_DIR/pytest-report.xml \
               --cov-report=xml:$REPORTS_DIR/pytest-coverage.xml \
-              --cov-report=term | tee $REPORTS_DIR/pytest-report.txt"
+              --cov-report=term | tee $REPORTS_DIR/pytest-output.txt"
+
+      - name: Run pylint
+        if: ${{ steps.changed-files.outputs.src == 'true' }}
+        run: |
+          docker compose run --rm build_node bash -c "
+            pylint --exit-zero ${{ steps.changed-files.outputs.src_files }} \
+              | tee $REPORTS_DIR/pylint-report.txt"
+
+      - name: Run black
+        if: ${{ steps.changed-files.outputs.py == 'true' }}
+        run: |
+          docker compose run --rm build_node bash -c "
+            black --check --diff --color ${{ steps.changed-files.outputs.py_files }} \
+              | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/black-report.txt)"
+
+      - name: Run isort
+        if: ${{ steps.changed-files.outputs.py == 'true' }}
+        run: |
+          docker compose run --rm build_node bash -c "
+            isort --check-only --diff --color ${{ steps.changed-files.outputs.py_files }} \
+              | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/isort-report.txt)"
+
+      - name: Run bandit
+        if: ${{ steps.changed-files.outputs.src == 'true' }}
+        run: |
+          docker compose run --rm build_node bash -c "
+            bandit -c pyproject.toml ${{ steps.changed-files.outputs.src_files }} \
+              | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/bandit-report.txt)"
+
+      - name: Generate .md reports
+        run: |
+          awk 'NR == 1 {next}; /^-+ coverage:/ {exit}; {print}' $REPORTS_DIR/pytest-output.txt \
+            > $REPORTS_DIR/pytest-report.txt
+          awk '/^-+ coverage:/, /^TOTAL/' $REPORTS_DIR/pytest-output.txt \
+            > $REPORTS_DIR/coverage-report.txt
+
+          for tool in coverage pytest pylint black isort bandit; do
+            if [[ -s $REPORTS_DIR/${tool}-report.txt ]]; then
+              {
+                printf "<details><summary>${tool^} report</summary>\n"
+                printf '\n```\n'
+                cat $REPORTS_DIR/${tool}-report.txt
+                printf '\n```\n'
+                printf '\n</details>\n\n'
+              } > $REPORTS_DIR/${tool}-report.md
+            fi
+          done
 
       - name: Save environment
         run: |
@@ -77,24 +139,8 @@ jobs:
           name: preflight-reports
           path: ${{ env.REPORTS_DIR }}
           compression-level: 9
-          retention-days: 1
 
       - name: Publish Job Summary
         run: |
-          {
-            printf "## Test Results\n\n"
-            printf '<details><summary>Click to expand</summary>\n'
-            printf '\n```\n'
-            awk 'NR == 1 {next}; /^-+ generated xml file:/ {exit}; {print}' \
-              $REPORTS_DIR/pytest-report.txt
-            printf '\n```\n'
-            printf '</details>\n\n'
-
-            printf "## Code Coverage\n\n"
-            printf '<details><summary>Click to expand</summary>\n'
-            printf '\n```\n'
-            awk '/^-+ coverage:/, /^TOTAL/' \
-              $REPORTS_DIR/pytest-report.txt
-            printf '\n```\n'
-            printf '</details>\n\n'
-          } > $GITHUB_STEP_SUMMARY
+          cat $REPORTS_DIR/{coverage,pytest,pylint,black,isort,bandit}-report.md \
+            > $GITHUB_STEP_SUMMARY 2>/dev/null || true
