@@ -2,7 +2,7 @@ System overview
 --
 
 <picture>
-  <img alt="Test Coverage" src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/maccelf/fc7bacd03455d19a15024e7ae1c29e24/raw/build-node-badge__master.json">
+  <img alt="Test Coverage" src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/andrewlukoshko/8687c6723114906b7ca082f24109845d/raw/coverage-badge.json">
 </picture>
 <br/><br/>
 
