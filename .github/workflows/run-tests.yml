@@ -52,9 +52,9 @@ jobs:
         # https://github.com/marketplace/actions/dynamic-badges
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
-           auth: ${{ secrets.GIST_SECRET }}
-           gistID: fc7bacd03455d19a15024e7ae1c29e24
-           filename: build-node-badge__master.json
+           auth: ${{ secrets.GIST_TOKEN }}
+           gistID: 8687c6723114906b7ca082f24109845d
+           filename: coverage-badge.json
            label: Test Coverage
            message: ${{ steps.pytest.outputs.percent_covered }}%
            valColorRange: ${{ steps.pytest.outputs.percent_covered }}
