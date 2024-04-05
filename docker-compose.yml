@@ -3,8 +3,17 @@ services:
     image: albs-node:latest
     build:
       context: .
+      target: albs-node
     privileged: true
     command: "python3 almalinux_build_node.py -v"
     volumes:
       - ".:/build-node"
       - "./node-config/castor/build_node.yml:/root/.config/castor/build_node.yml"
+
+  build_node_tests:
+    image: albs-node-tests:latest
+    build:
+      context: .
+      target: albs-node-tests
+    volumes:
+      - ".:/build-node"
