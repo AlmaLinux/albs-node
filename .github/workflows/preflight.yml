@@ -51,6 +51,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: albs-node-tests
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -73,7 +74,7 @@ jobs:
 
       - name: Run pytest
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             pytest -v --cov \
               --junit-xml=$REPORTS_DIR/pytest-report.xml \
               --cov-report=xml:$REPORTS_DIR/pytest-coverage.xml \
@@ -82,28 +83,28 @@ jobs:
       - name: Run pylint
         if: ${{ steps.changed-files.outputs.src == 'true' }}
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             pylint --exit-zero ${{ steps.changed-files.outputs.src_files }} \
               | tee $REPORTS_DIR/pylint-report.txt"
 
       - name: Run black
         if: ${{ steps.changed-files.outputs.py == 'true' }}
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             black --check --diff --color ${{ steps.changed-files.outputs.py_files }} \
               | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/black-report.txt)"
 
       - name: Run isort
         if: ${{ steps.changed-files.outputs.py == 'true' }}
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             isort --check-only --diff --color ${{ steps.changed-files.outputs.py_files }} \
               | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/isort-report.txt)"
 
       - name: Run bandit
         if: ${{ steps.changed-files.outputs.src == 'true' }}
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             bandit -c pyproject.toml ${{ steps.changed-files.outputs.src_files }} \
               | tee >(sed 's/\x1B\[[0-9;]*m//g' > $REPORTS_DIR/bandit-report.txt)"
 

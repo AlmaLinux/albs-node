@@ -28,6 +28,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: albs-node-tests
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -38,7 +39,7 @@ jobs:
       - name: Run pytest
         id: pytest
         run: |
-          docker compose run --rm build_node bash -c "
+          docker compose run --rm build_node_tests bash -c "
             pytest -v --cov \
               --cov-report=json:$REPORTS_DIR/pytest-report.json \
               --cov-report=term | tee $REPORTS_DIR/pytest-output.txt"
