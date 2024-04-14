@@ -52,14 +52,21 @@ jobs:
             cat test-summary.md
             printf "\n\n### Code Coverage Summary\n"
             cat code-coverage-results.md
-            JOB_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${{ github.event.workflow_run.id }}"
-            printf "\nView full reports on the [Job Summary]($JOB_URL \"Go to Job Summary\") page\n\n"
+            printf "\n"
 
             cat {pylint,black,isort,bandit}-report.md > linter-reports.md 2>/dev/null || true
             if [[ -s linter-reports.md ]]; then
               printf "### Linter reports\n"
-              cat linter-reports.md
+              # Max size of comments on GitHub is 64KB. If the reports > 54KB, don't post them
+              if [[ $(stat --format=%s linter-reports.md) -gt 55296 ]]; then
+                printf "The reports are too big to be posted here.\n"
+              else
+                cat linter-reports.md
+              fi
             fi
+
+            JOB_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${{ github.event.workflow_run.id }}"
+            printf "View full reports on the [Job Summary]($JOB_URL \"Go to Job Summary\") page.\n"
           } > preflight-report.md
 
       - name: Comment PR
