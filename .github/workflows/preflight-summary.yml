@@ -57,11 +57,13 @@ jobs:
             cat {pylint,black,isort,bandit}-report.md > linter-reports.md 2>/dev/null || true
             if [[ -s linter-reports.md ]]; then
               printf "### Linter reports\n"
-              # Max size of comments on GitHub is 64KB. If the reports > 54KB, don't post them
-              if [[ $(stat --format=%s linter-reports.md) -gt 55296 ]]; then
-                printf "The reports are too big to be posted here.\n"
-              else
+              # Max size of comments on GitHub is 64KB. Don't post reports if they don't fit.
+              if awk '{sum += $1} END {exit sum > (62*1024)}' \
+                  <<< $(stat --format=%s test-summary.md code-coverage-results.md linter-reports.md)
+              then
                 cat linter-reports.md
+              else
+                printf "The reports are too big to be posted here.\n"
               fi
             fi
 
