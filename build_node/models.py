@@ -66,7 +66,6 @@ class Task(BaseModel):
 class Artifact(BaseModel):
 
     name: str
-    # pulp_rpm or s3
     type: str
     href: str
     sha256: str

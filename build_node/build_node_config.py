@@ -30,10 +30,6 @@ DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
 DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
-DEFAULT_S3_REGION = ''
-DEFAULT_S3_BUCKET = ''
-DEFAULT_S3_SECRET_ACCESS_KEY = ''
-DEFAULT_S3_ACCESS_KEY_ID = ''
 DEFAULT_JWT_TOKEN = 'test_jwt'
 
 __all__ = ['BuildNodeConfig']
@@ -118,10 +114,6 @@ class BuildNodeConfig(BaseConfig):
             'pulp_uploader_max_workers': DEFAULT_PULP_UPLOADER_MAX_WORKERS,
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
             'mock_basedir': DEFAULT_MOCK_BASEDIR,
-            's3_region': DEFAULT_S3_REGION,
-            's3_bucket': DEFAULT_S3_BUCKET,
-            's3_access_key_id': DEFAULT_S3_ACCESS_KEY_ID,
-            's3_secret_access_key': DEFAULT_S3_SECRET_ACCESS_KEY,
             'base_arch': platform.machine(),
             'immudb_username': None,
             'immudb_password': None,
@@ -155,10 +147,6 @@ class BuildNodeConfig(BaseConfig):
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
             'pulp_uploader_max_workers': {'type': 'integer', 'nullable': False},
             'mock_basedir': {'type': 'string', 'nullable': True},
-            's3_bucket': {'type': 'string', 'nullable': False},
-            's3_region': {'type': 'string', 'nullable': False},
-            's3_access_key_id': {'type': 'string', 'nullable': False},
-            's3_secret_access_key': {'type': 'string', 'nullable': False},
             'jwt_token': {'type': 'string', 'required': True},
             'immudb_username': {'type': 'string', 'nullable': True},
             'immudb_password': {'type': 'string', 'nullable': True},
