@@ -3,9 +3,6 @@ import typing
 from pydantic import BaseModel
 
 
-__all__ = ['Task']
-
-
 class TaskRepo(BaseModel):
 
     name: str
