@@ -210,7 +210,7 @@ def safe_symlink(src, dst):
     bool
         True if symlink has been created, False otherwise.
     """
-    if not os.path.exists(dst):
+    if not os.path.lexists(dst):
         os.symlink(src, dst)
         return True
     return False
@@ -488,7 +488,7 @@ def copy_dir_recursive(source, destination, ignore=None):
         dst_name = os.path.join(destination, filename)
         if os.path.isdir(src_name):
             os.mkdir(dst_name)
-            copy_dir_recursive(src_name, dst_name)
+            copy_dir_recursive(src_name, dst_name, ignore)
         else:
             shutil.copy(src_name, dst_name)
 
