@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-10-19
-
-"""
-CloudLinux Build System build node process.
-"""
 
 import argparse
 import logging
@@ -25,7 +18,6 @@ from build_node.build_node_supervisor import BuilderSupervisor
 from build_node.mock.mock_environment import MockError
 from build_node.utils.file_utils import chown_recursive, rm_sudo
 from build_node.utils.config import locate_config_file
-from build_node.utils.log import configure_logger
 from build_node.utils.spec_parser import SpecParseError
 
 running = True
@@ -52,6 +44,27 @@ def init_args_parser():
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='enable additional debug output')
     return parser
+
+
+def init_logger(verbose):
+    """
+    Initializes a program root logger.
+
+    Parameters
+    ----------
+    verbose : bool
+        Enable DEBUG messages output if True, print only INFO and higher
+        otherwise.
+    """
+    level = logging.DEBUG if verbose else logging.INFO
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    log_format = "%(asctime)s %(levelname)-8s [%(threadName)s]: %(message)s"
+    formatter = logging.Formatter(log_format, '%y.%m.%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(level)
 
 
 def init_working_dir(config):
@@ -117,7 +130,7 @@ def main(sys_args):
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
         return 2
-    configure_logger(args.verbose)
+    init_logger(args.verbose)
     init_working_dir(config)
     init_sentry(config)
 
