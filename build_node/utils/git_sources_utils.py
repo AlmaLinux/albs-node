@@ -33,7 +33,7 @@ class BaseSourceDownloader:
         for checksum, path in self.iter_source_records():
             self.download_source(checksum, path)
 
-    def download_source(self):
+    def download_source(self, checksum: str, dst_path: str) -> str:
         raise NotImplementedError()
 
 
