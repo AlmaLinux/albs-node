@@ -48,14 +48,14 @@ def build_task_src_rpm():
         },
         "ref": {
             "url": "https://example.com/test-package-1-1.el7.src.rpm",
-            "git_ref": "8.8-1",
+            "git_ref": None,
             "ref_type": 3,
             "git_commit_hash": None,
         },
         "is_cas_authenticated": False,
         "alma_commit_cas_hash": None,
         "is_secure_boot": False,
-        "created_by": {"username": "test", "email": "test@almalinux.com"},
+        "created_by": {"name": "test", "email": "test@almalinux.com"},
         "repositories": [{
             "name": "test",
             "url": "http://test.repo.com",
