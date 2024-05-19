@@ -39,7 +39,7 @@ jobs:
       - name: Run pytest
         id: pytest
         run: |
-          docker compose run --rm build_node_tests bash -c "
+          docker compose run --rm build_node_tests bash -o pipefail -c "
             pytest -v --cov \
               --cov-report=json:$REPORTS_DIR/pytest-report.json \
               --cov-report=term | tee $REPORTS_DIR/pytest-output.txt"
@@ -64,6 +64,7 @@ jobs:
            namedLogo: pytest
 
       - name: Generate .md reports
+        if: success() || failure()
         run: |
           awk 'NR == 1 {next}; /^-+ coverage:/ {exit}; {print}' $REPORTS_DIR/pytest-output.txt \
             > $REPORTS_DIR/pytest-report.txt
@@ -83,6 +84,7 @@ jobs:
           done
 
       - name: Publish Job Summary
+        if: success() || failure()
         run: |
           cat $REPORTS_DIR/{coverage,pytest}-report.md \
             > $GITHUB_STEP_SUMMARY 2>/dev/null || true
