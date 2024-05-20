@@ -27,6 +27,7 @@ jobs:
         run: cat environment.txt | tee -a $GITHUB_ENV
 
       - name: Generate Test Summary
+        if: ${{ hashFiles('pytest-report.xml') != '' }}
         # https://github.com/marketplace/actions/junit-test-dashboard
         uses: test-summary/action@v2
         with:
@@ -34,6 +35,7 @@ jobs:
           output: test-summary.md
 
       - name: Generate Coverage Summary
+        if: ${{ hashFiles('pytest-coverage.xml') != '' }}
         # https://github.com/marketplace/actions/code-coverage-summary
         # Generates code-coverage-results.md
         uses: irongut/CodeCoverageSummary@v1.3.0
@@ -48,15 +50,21 @@ jobs:
 
       - name: Generate Preflight Summary
         run: |
+          touch test-summary.md code-coverage-results.md
+
           {
-            cat test-summary.md
-            printf "\n\n### Code Coverage Summary\n"
-            cat code-coverage-results.md
-            printf "\n"
+            if [[ -s test-summary.md ]]; then
+              cat test-summary.md
+            fi
+
+            if [[ -s code-coverage-results.md ]]; then
+              printf "\n\n### Code Coverage Summary\n"
+              cat code-coverage-results.md
+            fi
 
             cat {pylint,black,isort,bandit}-report.md > linter-reports.md 2>/dev/null || true
             if [[ -s linter-reports.md ]]; then
-              printf "### Linter reports\n"
+              printf "\n### Linter reports\n"
               # Max size of comments on GitHub is 64KB. Don't post reports if they don't fit.
               if awk '{sum += $1} END {exit sum > (62*1024)}' \
                   <<< $(stat --format=%s test-summary.md code-coverage-results.md linter-reports.md)
@@ -68,7 +76,7 @@ jobs:
             fi
 
             JOB_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${{ github.event.workflow_run.id }}"
-            printf "View full reports on the [Job Summary]($JOB_URL \"Go to Job Summary\") page.\n"
+            printf "\nView full reports on the [Job Summary]($JOB_URL \"Go to Job Summary\") page.\n"
           } > preflight-report.md
 
       - name: Comment PR
