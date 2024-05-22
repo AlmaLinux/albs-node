@@ -50,8 +50,6 @@ jobs:
 
       - name: Generate Preflight Summary
         run: |
-          touch test-summary.md code-coverage-results.md
-
           {
             if [[ -s test-summary.md ]]; then
               cat test-summary.md
@@ -67,7 +65,7 @@ jobs:
               printf "\n### Linter reports\n"
               # Max size of comments on GitHub is 64KB. Don't post reports if they don't fit.
               if awk '{sum += $1} END {exit sum > (62*1024)}' \
-                  <<< $(stat --format=%s test-summary.md code-coverage-results.md linter-reports.md)
+                  <<< $(stat --format=%s test-summary.md code-coverage-results.md linter-reports.md 2>/dev/null)
               then
                 cat linter-reports.md
               else
