@@ -266,6 +266,8 @@ class BaseRPMBuilder(BaseBuilder):
                                           srpm_artifacts=True)
         srpm_path = srpm_build_result.srpm
         self.logger.info('src-RPM %s was successfully built', srpm_path)
+        if self.task.arch == 'src':
+            return
         excluded, reason = self.is_build_excluded(srpm_path)
         if excluded:
             raise BuildExcluded(reason)
@@ -441,6 +443,8 @@ class BaseRPMBuilder(BaseBuilder):
                                **yum_config_kwargs)
         mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
         target_arch = task.arch
+        if target_arch == 'src':
+            target_arch = config.base_arch
         for key, value in task.platform.data['mock'].items():
             if key == 'target_arch':
                 target_arch = value

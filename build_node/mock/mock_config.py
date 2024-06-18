@@ -286,7 +286,7 @@ class MockConfig(object):
             return 'x86_64',
         elif target_arch in ('i386', 'i586', 'i686'):
             return 'i386', 'i586', 'i686', 'x86_64'
-        elif target_arch == 'noarch':
+        elif target_arch in ('noarch', 'src'):
             return ('i386', 'i586', 'i686', 'x86_64', 'noarch', 'aarch64',
                     'armhf', 'ppc64le', 's390x')
         elif target_arch == 'aarch64':

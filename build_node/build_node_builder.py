@@ -264,6 +264,8 @@ class BuildNodeBuilder(threading.Thread):
         supported_arches = [self.__config.base_arch]
         if self.__config.base_arch == 'x86_64':
             supported_arches.append('i686')
+        if self.__config.build_src:
+            supported_arches.append('src')
         task = self.__call_master(
             'get_task',
             err_msg="Can't request new task from master:",
