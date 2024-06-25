@@ -177,9 +177,14 @@ class BuildNodeBuilder(threading.Thread):
                     build_artifacts = []
                     success = False
                 finally:
-                    build_artifacts.append(
-                        self._pulp_uploader.upload_single_file(task_log_file)
-                    )
+                    try:
+                        build_artifacts.append(
+                            self._pulp_uploader.upload_single_file(task_log_file)
+                        )
+                    except Exception as e:
+                        self.__logger.exception(
+                            'Cannot upload task log file: %s', str(e)
+                        )
 
                 for artifact in build_artifacts:
                     artifact.cas_hash = notarized_artifacts.get(artifact.path)
