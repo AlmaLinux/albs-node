@@ -859,12 +859,7 @@ class MirroredGitRepo(object):
         @raise GitCacheError: If git-clone execution failed.
         """
         cmd = ["git", "clone"]
-        env = {'GIT_TERMINAL_PROMPT': '0'}
-
-        if 'GIT_SSL_NO_VERIFY' in os.environ:
-            # value doesn't matter
-            # git doesn't verify if this env var exists
-            env['GIT_SSL_NO_VERIFY'] = '1'
+        env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
 
         if self.__git_command_extras is not None:
             cmd.extend( self.__git_command_extras )
