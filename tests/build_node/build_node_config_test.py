@@ -55,6 +55,7 @@ class TestBuildNodeConfig(TestCase):
             'pulp_timeout': 120,
             'mock_basedir': None,
             'base_arch': platform.machine(),
+            'build_src': True,
             'immudb_username': None,
             'immudb_password': None,
             'immudb_database': None,
