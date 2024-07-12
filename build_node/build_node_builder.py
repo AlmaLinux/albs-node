@@ -268,7 +268,7 @@ class BuildNodeBuilder(threading.Thread):
     def __request_task(self):
         supported_arches = [self.__config.base_arch]
         if self.__config.base_arch == 'x86_64':
-            supported_arches.extend(['i686', 'x86_64_v2', 'x86_64_fp'])
+            supported_arches.append('i686')
         if self.__config.build_src:
             supported_arches.append('src')
         task = self.__call_master(
