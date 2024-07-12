@@ -282,7 +282,7 @@ class MockConfig(object):
             If `legal_host_arches` default value could't be detected for the
             specified target architecture.
         """
-        if target_arch == 'x86_64':
+        if target_arch in ('x86_64', 'x86_64_v2'):
             return 'x86_64',
         elif target_arch in ('i386', 'i586', 'i686'):
             return 'i386', 'i586', 'i686', 'x86_64'
