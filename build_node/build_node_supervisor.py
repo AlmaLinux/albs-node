@@ -23,7 +23,7 @@ class BuilderSupervisor(threading.Thread):
         retry_strategy = Retry(
             total=constants.TOTAL_RETRIES,
             status_forcelist=constants.STATUSES_TO_RETRY,
-            method_whitelist=constants.METHODS_TO_RETRY,
+            allowed_methods=constants.METHODS_TO_RETRY,
             backoff_factor=constants.BACKOFF_FACTOR,
             raise_on_status=True,
         )
