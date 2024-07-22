@@ -33,7 +33,10 @@ from build_node.mock.mock_config import (
 from build_node.mock.mock_environment import MockError
 from build_node.utils.rpm_utils import unpack_src_rpm
 from build_node.utils.file_utils import download_file
-from build_node.utils.git_sources_utils import AlmaSourceDownloader
+from build_node.utils.git_sources_utils import (
+    AlmaSourceDownloader,
+    CentpkgDowloader,
+)
 from build_node.utils.index_utils import extract_metadata
 from build_node.utils.spec_parser import SpecParser, SpecSource
 from build_node.ported import to_unicode
@@ -113,7 +116,11 @@ class BaseRPMBuilder(BaseBuilder):
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
                         self.cas_source_authenticate(git_sources_dir)
-                    self.prepare_alma_sources(git_sources_dir)
+                    sources_file = os.path.join(git_sources_dir, 'sources')
+                    if os.path.exists(sources_file):
+                        self.prepare_centos_sources(git_sources_dir)
+                    else:
+                        self.prepare_alma_sources(git_sources_dir)
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
                         src_suffix_dir = 'SOURCES'
@@ -299,8 +306,14 @@ class BaseRPMBuilder(BaseBuilder):
         self.logger.info('Sources are prepared')
         return src_dir
 
-    def prepare_alma_sources(self, git_sources_dir: str):
+    @staticmethod
+    def prepare_alma_sources(git_sources_dir: str):
         downloader = AlmaSourceDownloader(git_sources_dir)
+        downloader.download_all()
+
+    @staticmethod
+    def prepare_centos_sources(git_sources_dir: str):
+        downloader = CentpkgDowloader(git_sources_dir)
         downloader.download_all()
 
     def prepare_koji_sources(self, git_repo, git_sources_dir, output_dir,

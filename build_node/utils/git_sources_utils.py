@@ -2,6 +2,8 @@ import os
 import re
 import urllib.parse
 
+from plumbum import local
+
 from build_node.utils.file_utils import download_file
 
 
@@ -46,3 +48,17 @@ class AlmaSourceDownloader(BaseSourceDownloader):
         # sources.almalinux.org doesn't accept default pycurl user-agent
         headers = ['User-Agent: Almalinux build node']
         return download_file(full_url, download_path, http_header=headers)
+
+
+class CentpkgDowloader(BaseSourceDownloader):
+
+    def download_source(self, checksum: str, dst_path: str) -> str:
+        pass
+
+    def download_all(self):
+        if not self.find_metadata_file():
+            return
+        sources_file = os.path.join(self._sources_dir, 'sources')
+        if not os.path.isfile(sources_file):
+            return
+        local['centpkg']['sources']()
