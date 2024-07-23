@@ -8,7 +8,8 @@ RUN <<EOT
   dnf install -y \
     gcc gcc-c++ make cmake git mock keyrings-filesystem sudo \
     libicu libicu-devel kernel-rpm-macros createrepo_c cpio \
-    python3-devel python3-lxml python3-createrepo_c python3-libmodulemd
+    python3-devel python3-lxml python3-createrepo_c python3-libmodulemd \
+    centpkg
   dnf clean all
 EOT
 
