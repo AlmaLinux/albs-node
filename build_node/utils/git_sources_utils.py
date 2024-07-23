@@ -56,9 +56,8 @@ class CentpkgDowloader(BaseSourceDownloader):
         pass
 
     def download_all(self):
-        if not self.find_metadata_file():
-            return
         sources_file = os.path.join(self._sources_dir, 'sources')
         if not os.path.isfile(sources_file):
             return
-        local['centpkg']['sources']()
+        local['centpkg'].with_cwd(self._sources_dir).run(
+            args=('sources', '--force'))
