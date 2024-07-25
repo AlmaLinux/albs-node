@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import urllib.parse
@@ -16,24 +17,42 @@ class BaseSourceDownloader:
         for candidate in os.listdir(self._sources_dir):
             if re.search(r'^\..*\.metadata$', candidate):
                 return os.path.join(self._sources_dir, candidate)
+            elif candidate == 'sources':
+                return os.path.join(self._sources_dir, candidate)
 
     def iter_source_records(self):
         metadata_file = self.find_metadata_file()
         if metadata_file is None:
             return
         for line in open(metadata_file, 'r').readlines():
-            checksum, path = line.strip().split()
+            stripped = line.strip()
+            if stripped.lower().startswith('sha512'):
+                result = re.search(
+                    r'SHA512\s+\((?P<source>.+)\)\s+=\s+(?P<checksum>[\w\d]+)',
+                    line.strip(), re.IGNORECASE
+                ).groupdict()
+                checksum = result['checksum']
+                path = result['source']
+            else:
+                checksum, path = line.strip().split()
             yield checksum, os.path.join(self._sources_dir, path)
 
-    def download_all(self):
+    def download_all(self) -> bool:
         if not self.find_metadata_file():
-            return
+            return False
         # TODO: instead of hardcoded name, we should create any path,
         #       needed by metadata file, not just "SOURCES"
         if not os.path.exists(os.path.join(self._sources_dir, 'SOURCES')):
             os.mkdir(os.path.join(self._sources_dir, 'SOURCES'))
+        download_dict = {}
         for checksum, path in self.iter_source_records():
-            self.download_source(checksum, path)
+            try:
+                self.download_source(checksum, path)
+            except:
+                logging.exception('Cannot download %s with checksum %s', path, checksum)
+            else:
+                download_dict[checksum] = True
+        return all(download_dict.values())
 
     def download_source(self, checksum: str, dst_path: str) -> str:
         raise NotImplementedError()
@@ -58,6 +77,7 @@ class CentpkgDowloader(BaseSourceDownloader):
     def download_all(self):
         sources_file = os.path.join(self._sources_dir, 'sources')
         if not os.path.isfile(sources_file):
-            return
+            return False
         local['centpkg'].with_cwd(self._sources_dir).run(
             args=('sources', '--force'))
+        return True

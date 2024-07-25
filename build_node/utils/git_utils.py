@@ -864,7 +864,7 @@ class MirroredGitRepo(object):
         if self.__git_command_extras is not None:
             cmd.extend( self.__git_command_extras )
         if git_opts is not None:
-            cmd.extend( git_opts )
+            cmd.extend(git_opts)
         if mirror:
             cmd.append("--mirror")
         cmd.extend((repo_url, target_dir))

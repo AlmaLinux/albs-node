@@ -19,7 +19,7 @@ from build_node.mock.mock_config import (
 )
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.utils.file_utils import safe_mkdir, chown_recursive
-from build_node.utils.git_utils import MirroredGitRepo, git_get_commit_id
+from build_node.utils.git_utils import MirroredGitRepo, git_get_commit_id, WrappedGitRepo
 from .. import build_node_globals as node_globals
 
 __all__ = ['measure_stage', 'BaseBuilder']
@@ -89,7 +89,7 @@ class BaseBuilder(object):
         self._pre_build_hook_target_arch = self.config.base_arch
 
     @measure_stage("git_checkout")
-    def checkout_git_sources(self, git_sources_dir, ref):
+    def checkout_git_sources(self, git_sources_dir, ref, use_repo_cache: bool = True):
         """
         Checkouts a project sources from the specified git repository.
 
@@ -99,6 +99,8 @@ class BaseBuilder(object):
             Target directory path.
         ref : TaskRef
             Git (gerrit) reference.
+        use_repo_cache : bool
+            Switch on or off the repo caching ability
 
         Returns
         -------
@@ -109,12 +111,16 @@ class BaseBuilder(object):
             ref.git_ref, ref.url))
         # FIXME: Understand why sometimes we hold repository lock more
         #  than 60 seconds
-        with MirroredGitRepo(
-                ref.url, self.config.git_repos_cache_dir,
-                self.config.git_cache_locks_dir,
-                timeout=600, git_command_extras=self.config.git_extra_options) as cached_repo:
-            repo = cached_repo.clone_to(git_sources_dir)
-            repo.checkout(ref.git_ref)
+        if use_repo_cache:
+            with MirroredGitRepo(
+                    ref.url, self.config.git_repos_cache_dir,
+                    self.config.git_cache_locks_dir,
+                    timeout=600, git_command_extras=self.config.git_extra_options) as cached_repo:
+                repo = cached_repo.clone_to(git_sources_dir)
+        else:
+            repo = WrappedGitRepo(git_sources_dir)
+            repo.clone_from(ref.url, git_sources_dir)
+        repo.checkout(ref.git_ref)
         self.__log_commit_id(git_sources_dir)
         return repo
 
