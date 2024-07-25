@@ -111,16 +111,22 @@ class BaseRPMBuilder(BaseBuilder):
             if self.task.is_srpm_build_required():
                 git_sources_dir = os.path.join(self.task_dir, 'git_sources')
                 os.makedirs(git_sources_dir)
+                # TODO: Temporarily disable git caching because it interferes with
+                #  centpkg work
                 git_repo = self.checkout_git_sources(
-                    git_sources_dir, self.task.ref)
+                    git_sources_dir, self.task.ref, use_repo_cache=False)
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
                         self.cas_source_authenticate(git_sources_dir)
                     sources_file = os.path.join(git_sources_dir, 'sources')
-                    if os.path.exists(sources_file):
-                        self.prepare_centos_sources(git_sources_dir)
-                    else:
-                        self.prepare_alma_sources(git_sources_dir)
+                    centos_sources_downloaded = False
+                    self.logger.info('Trying to download AlmaLinux sources')
+                    alma_sources_downloaded = self.prepare_alma_sources(git_sources_dir)
+                    if not alma_sources_downloaded and os.path.exists(sources_file):
+                        self.logger.info('AlmaLinux sources were not downloaded, calling centpkg')
+                        centos_sources_downloaded = self.prepare_centos_sources(git_sources_dir)
+                    if not alma_sources_downloaded and not centos_sources_downloaded:
+                        raise BuildError('Cannot download build sources')
                     if os.path.exists(os.path.join(
                             git_sources_dir, 'SOURCES')):
                         src_suffix_dir = 'SOURCES'
@@ -307,14 +313,14 @@ class BaseRPMBuilder(BaseBuilder):
         return src_dir
 
     @staticmethod
-    def prepare_alma_sources(git_sources_dir: str):
+    def prepare_alma_sources(git_sources_dir: str) -> bool:
         downloader = AlmaSourceDownloader(git_sources_dir)
-        downloader.download_all()
+        return downloader.download_all()
 
     @staticmethod
-    def prepare_centos_sources(git_sources_dir: str):
+    def prepare_centos_sources(git_sources_dir: str) -> bool:
         downloader = CentpkgDowloader(git_sources_dir)
-        downloader.download_all()
+        return downloader.download_all()
 
     def prepare_koji_sources(self, git_repo, git_sources_dir, output_dir,
                              src_suffix_dir=None):
@@ -361,7 +367,11 @@ class BaseRPMBuilder(BaseBuilder):
                     file_name = os.path.split(source.name)[1]
                 else:
                     # TODO: verify that it works with all valid remote URLs
-                    file_name = os.path.basename(parsed_url.path)
+                    if parsed_url.fragment:
+                        file_name = os.path.basename(parsed_url.fragment)
+                    else:
+                        file_name = os.path.basename(parsed_url.path)
+                add_source_path = os.path.join(git_sources_dir, file_name)
                 if not src_suffix_dir:
                     source_path = os.path.join(git_sources_dir, file_name)
                 else:
@@ -369,6 +379,8 @@ class BaseRPMBuilder(BaseBuilder):
                                                file_name)
                 if os.path.exists(source_path):
                     shutil.copy(source_path, output_dir)
+                elif not os.path.exists(source_path) and os.path.exists(add_source_path):
+                    shutil.copy(add_source_path, output_dir)
                 elif parsed_url.scheme in ('http', 'https', 'ftp'):
                     download_file(source.name, output_dir)
                 if source.position == 0 and isinstance(source, SpecSource):
