@@ -50,6 +50,7 @@ class BaseSourceDownloader:
                 self.download_source(checksum, path)
             except:
                 logging.exception('Cannot download %s with checksum %s', path, checksum)
+                download_dict[checksum] = False
             else:
                 download_dict[checksum] = True
         return all(download_dict.values())
