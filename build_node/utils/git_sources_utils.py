@@ -46,6 +46,10 @@ class BaseSourceDownloader:
             os.mkdir(os.path.join(self._sources_dir, 'SOURCES'))
         download_dict = {}
         for checksum, path in self.iter_source_records():
+            if 'SOURCES' not in path:
+                file_name = os.path.basename(path)
+                dir_name = os.path.dirname(path)
+                path = os.path.join(dir_name, 'SOURCES', file_name)
             try:
                 self.download_source(checksum, path)
             except:

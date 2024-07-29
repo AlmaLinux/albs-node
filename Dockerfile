@@ -6,7 +6,7 @@ RUN <<EOT
   dnf install -y epel-release
   dnf upgrade -y
   dnf install -y \
-    gcc gcc-c++ make cmake git mock keyrings-filesystem sudo \
+    gcc gcc-c++ make cmake git mock mock-rpmautospec keyrings-filesystem sudo \
     libicu libicu-devel kernel-rpm-macros createrepo_c cpio \
     python3-devel python3-lxml python3-createrepo_c python3-libmodulemd \
     centpkg
