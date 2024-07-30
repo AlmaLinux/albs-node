@@ -13,6 +13,6 @@ def test_download_all(fs):
 
         download_file.assert_called_with(
             'https://sources.almalinux.org/123ABCDEF',
-            '/src/data/file.txt',
+            '/src/data/SOURCES/file.txt',
             http_header=ANY,
         )
