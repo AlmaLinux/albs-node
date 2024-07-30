@@ -377,6 +377,10 @@ class BaseRPMBuilder(BaseBuilder):
                 else:
                     source_path = os.path.join(git_sources_dir, src_suffix_dir,
                                                file_name)
+                self.logger.info('Original path: %s, file exists: %s', source_path,
+                                 os.path.exists(source_path))
+                self.logger.info('Additional path: %s, file exists: %s', add_source_path,
+                                 os.path.exists(add_source_path))
                 if os.path.exists(source_path):
                     shutil.copy(source_path, output_dir)
                 elif not os.path.exists(source_path) and os.path.exists(add_source_path):

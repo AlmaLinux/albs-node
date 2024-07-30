@@ -183,6 +183,7 @@ class MockSupervisor(object):
         config_params = [
             # Secure Boot options
             'config_opts["plugin_conf"]["bind_mount_enable"] = True\n',
+            'config_opts["plugin_conf"]["rpmautospec_enable"] = True\n'
         ]
         if self.__host_arch == 'ppc64le':
             config_params.append('config_opts["macros"]["%_host_cpu"] = "ppc64le"\n')
