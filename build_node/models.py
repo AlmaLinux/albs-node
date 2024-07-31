@@ -59,6 +59,11 @@ class Task(BaseModel):
     def is_alma_source(self):
         return self.ref.url.startswith('https://git.almalinux.org/')
 
+    def is_rpmautospec_required(self):
+        return self.platform.data.get('mock', {}).get(
+            'rpmautospec_enable', False
+        )
+
 
 class Artifact(BaseModel):
 
