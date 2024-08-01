@@ -477,8 +477,6 @@ class MockPluginConfig(object):
             format(self.__name, to_mock_config_string(self.__enable))
         if not self.__enable:
             return out
-        out += 'config_opts["plugin_conf"]["{0}_opts"] = {{}}\n'. \
-            format(self.__name)
         for key, opt in sorted(self.__opts.items()):
             out += 'config_opts["plugin_conf"]["{0}_opts"][{1}] = {2}\n'. \
                 format(self.__name, to_mock_config_string(key),

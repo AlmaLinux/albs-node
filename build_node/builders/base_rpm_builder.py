@@ -16,9 +16,11 @@ import traceback
 import time
 import urllib.parse
 from distutils.dir_util import copy_tree
+from typing import Optional, Tuple
 
 import validators
 import rpm
+from pyrpm.spec import Spec, replace_macros
 
 from build_node.builders.base_builder import measure_stage, BaseBuilder
 from build_node.build_node_errors import (
@@ -28,9 +30,10 @@ from build_node.mock.error_detector import build_log_excluded_arch
 from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
 from build_node.mock.mock_config import (
     MockConfig, MockChrootFile, MockBindMountPluginConfig,
-    MockPluginChrootScanConfig
+    MockPluginChrootScanConfig, MockPluginConfig
 )
 from build_node.mock.mock_environment import MockError
+from build_node.utils.git_utils import WrappedGitRepo
 from build_node.utils.rpm_utils import unpack_src_rpm
 from build_node.utils.file_utils import download_file
 from build_node.utils.git_sources_utils import (
@@ -87,6 +90,44 @@ class BaseRPMBuilder(BaseBuilder):
         self.immudb_wrapper = immudb_wrapper
         self.codenotary_enabled = config.codenotary_enabled
 
+    def prepare_autospec_sources(
+        self,
+        git_sources_dir: str,
+        downloaded_sources_dir: str = None
+    ) -> Tuple[str, Optional[str]]:
+        source_srpm_dir = git_sources_dir
+        spec_file = self.locate_spec_file(git_sources_dir)
+        if downloaded_sources_dir:
+            base_path = os.path.join(git_sources_dir, downloaded_sources_dir)
+            for file_ in os.listdir(base_path):
+                shutil.copy(os.path.join(base_path, file_), git_sources_dir)
+        return source_srpm_dir, spec_file
+
+    def prepare_usual_sources(
+        self,
+        git_repo: WrappedGitRepo,
+        git_sources_dir: str,
+        sources_dir: str,
+        downloaded_sources_dir: str = None,
+    ) -> Tuple[str, Optional[str]]:
+        source_srpm_dir = os.path.join(self.task_dir, 'source_srpm')
+        os.makedirs(source_srpm_dir)
+        if downloaded_sources_dir == 'SOURCES':
+            copy_tree(sources_dir, source_srpm_dir)
+        cwd = os.getcwd()
+        try:
+            os.chdir(source_srpm_dir)
+            self.prepare_koji_sources(
+                git_repo,
+                git_sources_dir,
+                source_srpm_dir,
+                src_suffix_dir=downloaded_sources_dir
+            )
+        finally:
+            os.chdir(cwd)
+        spec_file = self.locate_spec_file(source_srpm_dir)
+        return source_srpm_dir, spec_file
+
     @measure_stage('build_all')
     def build(self):
         spec_file = None
@@ -109,16 +150,18 @@ class BaseRPMBuilder(BaseBuilder):
         src_suffix_dir = None
         try:
             if self.task.is_srpm_build_required():
-                git_sources_dir = os.path.join(self.task_dir, 'git_sources')
+                project_name = os.path.basename(str(self.task.ref.url)).replace('.git', '')
+                git_sources_dir = os.path.join(self.task_dir, project_name)
                 os.makedirs(git_sources_dir)
                 # TODO: Temporarily disable git caching because it interferes with
                 #  centpkg work
                 git_repo = self.checkout_git_sources(
                     git_sources_dir, self.task.ref, use_repo_cache=False)
+                sources_file = os.path.join(git_sources_dir, 'sources')
+                sources_dir = os.path.join(git_sources_dir, 'SOURCES')
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
                         self.cas_source_authenticate(git_sources_dir)
-                    sources_file = os.path.join(git_sources_dir, 'sources')
                     centos_sources_downloaded = False
                     self.logger.info('Trying to download AlmaLinux sources')
                     alma_sources_downloaded = self.prepare_alma_sources(git_sources_dir)
@@ -127,30 +170,21 @@ class BaseRPMBuilder(BaseBuilder):
                         centos_sources_downloaded = self.prepare_centos_sources(git_sources_dir)
                     if not alma_sources_downloaded and not centos_sources_downloaded:
                         raise BuildError('Cannot download build sources')
-                    if os.path.exists(os.path.join(
-                            git_sources_dir, 'SOURCES')):
+                    if os.path.exists(sources_dir):
                         src_suffix_dir = 'SOURCES'
                 self.execute_pre_build_hook(git_sources_dir)
-                source_srpm_dir = os.path.join(
-                    self.task_dir, 'source_srpm')
-                os.makedirs(source_srpm_dir)
-                if self.task.is_alma_source():
-                    if src_suffix_dir == 'SOURCES':
-                        copy_tree(
-                            os.path.join(git_sources_dir, 'SOURCES'),
-                            source_srpm_dir
-                        )
-                cwd = os.getcwd()
-                try:
-                    os.chdir(source_srpm_dir)
-                    spec_file = self.prepare_koji_sources(
+                if self.task.is_rpmautospec_required():
+                    source_srpm_dir, spec_file = self.prepare_autospec_sources(
+                        git_sources_dir,
+                        downloaded_sources_dir=src_suffix_dir
+                    )
+                else:
+                    source_srpm_dir, spec_file = self.prepare_usual_sources(
                         git_repo,
                         git_sources_dir,
-                        source_srpm_dir,
-                        src_suffix_dir=src_suffix_dir
+                        sources_dir,
+                        downloaded_sources_dir=src_suffix_dir
                     )
-                finally:
-                    os.chdir(cwd)
             else:
                 source_srpm_dir = self.unpack_sources()
                 spec_file = self.locate_spec_file(source_srpm_dir)
@@ -352,16 +386,22 @@ class BaseRPMBuilder(BaseBuilder):
             parsed_spec = SpecParser(
                 spec_path, self.task.platform.data.get('definitions')
             )
-        except ValueError:
-            self.logger.exception(
-                "Can't parse spec file, expecting all sources"
-                " to be in the right place already"
-            )
-            return new_spec_path
+            sources = parsed_spec.source_package.sources
+            patches = parsed_spec.source_package.patches
+        except Exception:
+            try:
+                parsed_spec = Spec.from_file(spec_path)
+                sources = [replace_macros(s, parsed_spec) for s in parsed_spec.sources]
+                patches = [replace_macros(p, parsed_spec) for p in parsed_spec.patches]
+            except Exception:
+                self.logger.exception(
+                    "Can't parse spec file, expecting all sources"
+                    " to be in the right place already"
+                )
+                return new_spec_path
         tarball_path = None
         try:
-            for source in itertools.chain(parsed_spec.source_package.sources,
-                                          parsed_spec.source_package.patches):
+            for source in itertools.chain(sources, patches):
                 parsed_url = urllib.parse.urlparse(source.name)
                 if parsed_url.scheme == '':
                     file_name = os.path.split(source.name)[1]
@@ -377,10 +417,16 @@ class BaseRPMBuilder(BaseBuilder):
                 else:
                     source_path = os.path.join(git_sources_dir, src_suffix_dir,
                                                file_name)
-                self.logger.info('Original path: %s, file exists: %s', source_path,
-                                 os.path.exists(source_path))
-                self.logger.info('Additional path: %s, file exists: %s', add_source_path,
-                                 os.path.exists(add_source_path))
+                self.logger.debug(
+                    'Original path: %s, file exists: %s',
+                    source_path,
+                    os.path.exists(source_path)
+                )
+                self.logger.debug(
+                    'Additional path: %s, file exists: %s',
+                    add_source_path,
+                    os.path.exists(add_source_path)
+                )
                 if os.path.exists(source_path):
                     shutil.copy(source_path, output_dir)
                 elif not os.path.exists(source_path) and os.path.exists(add_source_path):
@@ -483,6 +529,8 @@ class BaseRPMBuilder(BaseBuilder):
                 if not task.is_secure_boot:
                     continue
                 mock_config_kwargs['macros'].update(value)
+            elif key == 'rpmautospec_enable':
+                continue
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
@@ -502,6 +550,14 @@ class BaseRPMBuilder(BaseBuilder):
             mock_config.add_file(
                 MockChrootFile(MODSIGN_MACROS_PATH, MODSIGN_CONTENT)
             )
+        if task.is_rpmautospec_required():
+            rpmautospec_plugin = MockPluginConfig(
+                'rpmautospec',
+                True,
+                requires=['rpmautospec'],
+                cmd_base=['/usr/bin/rpmautospec', 'process-distgit']
+            )
+            mock_config.add_plugin(rpmautospec_plugin)
         if config.npm_proxy:
             BaseRPMBuilder.configure_mock_npm_proxy(
                 mock_config, config.npm_proxy)
