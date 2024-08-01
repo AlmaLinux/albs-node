@@ -105,10 +105,10 @@ class BaseRPMBuilder(BaseBuilder):
 
     def prepare_usual_sources(
         self,
-            git_repo: WrappedGitRepo,
-            git_sources_dir: str,
-            sources_dir: str,
-            downloaded_sources_dir: str = None,
+        git_repo: WrappedGitRepo,
+        git_sources_dir: str,
+        sources_dir: str,
+        downloaded_sources_dir: str = None,
     ) -> Tuple[str, Optional[str]]:
         source_srpm_dir = os.path.join(self.task_dir, 'source_srpm')
         os.makedirs(source_srpm_dir)
