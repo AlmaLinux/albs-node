@@ -13,7 +13,7 @@ lmdb==1.5.1
 #rpm Conflicts with python3-rpm
 pycurl==7.45.3
 pyicu==2.13.1
-pyyaml==6.0.1
+pyyaml==6.0.2
 filesplit==3.0.2
 pulpcore-client==3.56.1
 pydantic==2.8.2
