@@ -169,7 +169,10 @@ class BaseRPMBuilder(BaseBuilder):
                         self.logger.info('AlmaLinux sources were not downloaded, calling centpkg')
                         centos_sources_downloaded = self.prepare_centos_sources(git_sources_dir)
                     if not alma_sources_downloaded and not centos_sources_downloaded:
-                        raise BuildError('Cannot download build sources')
+                        self.logger.warning(
+                            'Both AlmaLinux and CentOS downloaders failed, '
+                            'assuming all sources are already in place'
+                        )
                     if os.path.exists(sources_dir):
                         src_suffix_dir = 'SOURCES'
                 self.execute_pre_build_hook(git_sources_dir)
