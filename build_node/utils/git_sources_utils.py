@@ -34,13 +34,8 @@ class BaseSourceDownloader:
                 checksum = result['checksum']
                 path = result['source']
             else:
-                if line.strip():
-                    checksum, path = line.strip().split()
-                else:
-                    checksum, path = None, None
-            final_path = None
-            if path:
-                final_path = os.path.join(self._sources_dir, path)
+                checksum, path = stripped.split() if stripped else (None, None)
+            final_path = os.path.join(self._sources_dir, path) if path else None
             yield checksum, final_path
 
     def download_all(self) -> bool:
