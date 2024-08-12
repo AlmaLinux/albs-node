@@ -23,7 +23,7 @@ class BaseSourceDownloader:
     def iter_source_records(self):
         metadata_file = self.find_metadata_file()
         if metadata_file is None:
-            return
+            return None, None
         for line in open(metadata_file, 'r').readlines():
             stripped = line.strip()
             if stripped.lower().startswith('sha512'):
@@ -34,8 +34,14 @@ class BaseSourceDownloader:
                 checksum = result['checksum']
                 path = result['source']
             else:
-                checksum, path = line.strip().split()
-            yield checksum, os.path.join(self._sources_dir, path)
+                if line.strip():
+                    checksum, path = line.strip().split()
+                else:
+                    checksum, path = None, None
+            final_path = None
+            if path:
+                final_path = os.path.join(self._sources_dir, path)
+            yield checksum, final_path
 
     def download_all(self) -> bool:
         if not self.find_metadata_file():
@@ -46,6 +52,8 @@ class BaseSourceDownloader:
             os.mkdir(os.path.join(self._sources_dir, 'SOURCES'))
         download_dict = {}
         for checksum, path in self.iter_source_records():
+            if checksum is None and path is None:
+                continue
             if 'SOURCES' not in path:
                 file_name = os.path.basename(path)
                 dir_name = os.path.dirname(path)
@@ -68,6 +76,8 @@ class AlmaSourceDownloader(BaseSourceDownloader):
     blob_storage = 'https://sources.almalinux.org/'
 
     def download_source(self, checksum: str, download_path: str) -> str:
+        if not checksum:
+            return
         full_url = urllib.parse.urljoin(self.blob_storage, checksum)
         # sources.almalinux.org doesn't accept default pycurl user-agent
         headers = ['User-Agent: Almalinux build node']
