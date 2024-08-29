@@ -149,6 +149,8 @@ class BaseRPMBuilder(BaseBuilder):
         #       e.g. `securelve.spec` for `cagefs` project
         src_suffix_dir = None
         try:
+            centos_sources_downloaded = False
+            alma_sources_downloaded = False
             if self.task.is_srpm_build_required():
                 project_name = os.path.basename(str(self.task.ref.url)).replace('.git', '')
                 git_sources_dir = os.path.join(self.task_dir, project_name)
@@ -162,7 +164,6 @@ class BaseRPMBuilder(BaseBuilder):
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
                         self.cas_source_authenticate(git_sources_dir)
-                    centos_sources_downloaded = False
                     self.logger.info('Trying to download AlmaLinux sources')
                     alma_sources_downloaded = self.prepare_alma_sources(git_sources_dir)
                     if not alma_sources_downloaded and os.path.exists(sources_file):
@@ -176,7 +177,11 @@ class BaseRPMBuilder(BaseBuilder):
                     if os.path.exists(sources_dir):
                         src_suffix_dir = 'SOURCES'
                 self.execute_pre_build_hook(git_sources_dir)
-                if self.task.is_rpmautospec_required():
+                autospec_conditions = [
+                    self.task.is_rpmautospec_required(),
+                    alma_sources_downloaded or centos_sources_downloaded
+                ]
+                if all(autospec_conditions):
                     source_srpm_dir, spec_file = self.prepare_autospec_sources(
                         git_sources_dir,
                         downloaded_sources_dir=src_suffix_dir
