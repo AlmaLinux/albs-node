@@ -152,7 +152,10 @@ class BaseRPMBuilder(BaseBuilder):
             centos_sources_downloaded = False
             alma_sources_downloaded = False
             if self.task.is_srpm_build_required():
-                project_name = os.path.basename(str(self.task.ref.url)).replace('.git', '')
+                url_str = str(self.task.ref.url)
+                if url_str.endswith('/'):
+                    url_str = url_str.strip('/')
+                project_name = os.path.basename(url_str).replace('.git', '')
                 git_sources_dir = os.path.join(self.task_dir, project_name)
                 os.makedirs(git_sources_dir)
                 # TODO: Temporarily disable git caching because it interferes with
