@@ -57,6 +57,8 @@ class BaseSourceDownloader:
                 self.download_source(checksum, path)
             except:
                 logging.exception('Cannot download %s with checksum %s', path, checksum)
+                if os.path.exists(path):
+                    os.remove(path)
                 download_dict[checksum] = False
             else:
                 download_dict[checksum] = True
@@ -88,6 +90,8 @@ class CentpkgDowloader(BaseSourceDownloader):
         sources_file = os.path.join(self._sources_dir, 'sources')
         if not os.path.isfile(sources_file):
             return False
-        local['centpkg'].with_cwd(self._sources_dir).run(
-            args=('sources', '--force'))
+        code, out, err = local['centpkg'].with_cwd(self._sources_dir).run(
+            args=('sources', '--force'), retcode=None)
+        if code != 0:
+            return False
         return True
