@@ -279,7 +279,7 @@ class MockConfig(object):
         Raises
         ------
         ValueError
-            If `legal_host_arches` default value could't be detected for the
+            If `legal_host_arches` default value couldn't be detected for the
             specified target architecture.
         """
         if target_arch in ('x86_64', 'x86_64_v2'):
@@ -294,10 +294,12 @@ class MockConfig(object):
         # TODO: Investigate if 32-bit packages will really be able to be built on 64-bit ARM
         elif target_arch in ('armhfp', 'armhf'):
             return 'aarch64', 'armhf', 'armhfp'
-        elif target_arch in ('ppc64le', ):
-            return 'ppc64le'
-        elif target_arch in ('s390x', ):
-            return 's390x'
+        elif target_arch == 'ppc64le':
+            return 'ppc64le',
+        elif target_arch == 's390x':
+            return 's390x',
+        elif target_arch == 'riscv64':
+            return 'riscv64',
         raise ValueError('there is no default_host_arches value for {0} '
                          'architecture'.format(target_arch))
 
