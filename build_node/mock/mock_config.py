@@ -288,7 +288,7 @@ class MockConfig(object):
             return 'i386', 'i586', 'i686', 'x86_64'
         elif target_arch in ('noarch', 'src'):
             return ('i386', 'i586', 'i686', 'x86_64', 'noarch', 'aarch64',
-                    'armhf', 'ppc64le', 's390x')
+                    'armhf', 'ppc64le', 's390x', 'riscv64')
         elif target_arch == 'aarch64':
             return 'aarch64',
         # TODO: Investigate if 32-bit packages will really be able to be built on 64-bit ARM
