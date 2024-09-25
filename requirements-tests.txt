@@ -6,4 +6,4 @@ pyfakefs==5.6.0
 isort[colors]==5.13.2
 black==24.8.0
 pylint==3.3.1
-bandit[toml]==1.7.9
+bandit[toml]==1.7.10
