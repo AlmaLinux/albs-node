@@ -141,6 +141,8 @@ class BuildNodeBuilder(threading.Thread):
             finally:
                 only_logs = (not (bool(filter_files(
                     artifacts_dir, lambda f: f.endswith('.rpm')))))
+                if success is False:
+                    only_logs = True
                 notarized_artifacts = {}
                 non_notarized_artifacts = []
                 if self._codenotary_enabled:
