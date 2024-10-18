@@ -734,18 +734,19 @@ class BaseRPMBuilder(BaseBuilder):
 
         exclusive_arch = get_expanded_value('exclusivearch')
         exclude_arch = get_expanded_value('excludearch')
-        if arch in exclude_arch:
-            return True, 'the "{0}" architecture is listed in ExcludeArch'.\
-                format(arch)
-        elif exclusive_arch:
+        if (
+            arch in exclude_arch
+            or arch == 'x86_64_v2' and 'x86_64' in exclude_arch
+        ):
+            return True, f'the "{arch}" architecture is listed in ExcludeArch'
+        if exclusive_arch:
             bit32_arches = {'i386', 'i486', 'i586', 'i686'}
             if arch == 'x86_64_v2' and 'x86_64' in exclusive_arch:
                 exclusive_arch.append(arch)
             if (arch not in bit32_arches and arch not in exclusive_arch) or \
                     (arch in bit32_arches and
                      not bit32_arches & set(exclusive_arch)):
-                return True, 'the "{0}" architecture is not listed in ' \
-                             'ExclusiveArch'.format(arch)
+                return True, f'the "{arch}" architecture is not listed in ExclusiveArch'
         return False, None
 
     @staticmethod
