@@ -6,8 +6,10 @@ import urllib.parse
 import requests
 import requests.adapters
 from urllib3 import Retry
+from cachetools import TTLCache
 
 from build_node import constants
+from build_node.utils.file_utils import file_url_exists
 
 
 class BuilderSupervisor(threading.Thread):
@@ -24,6 +26,10 @@ class BuilderSupervisor(threading.Thread):
         self.terminated_event = terminated_event
         self.__session = None
         self.__task_queue = task_queue
+        self.__cached_config = TTLCache(
+            maxsize=config.cache_size,
+            ttl=config.cache_update_interval,
+            )
         super(BuilderSupervisor, self).__init__(name='BuildersSupervisor')
 
     def __generate_request_session(self):
@@ -45,6 +51,7 @@ class BuilderSupervisor(threading.Thread):
     def __request_build_task(self):
         if not self.__task_queue.full():
             supported_arches = [self.config.base_arch]
+            excluded_packages = self.get_excluded_packages()
             if self.config.base_arch == 'x86_64':
                 supported_arches.append('i686')
             if self.config.build_src:
@@ -54,7 +61,7 @@ class BuilderSupervisor(threading.Thread):
             )
             data = {
                 'supported_arches': supported_arches,
-                'excluded_packages': [],
+                'excluded_packages': excluded_packages,
             }
             try:
                 response = self.__session.post(
@@ -89,6 +96,15 @@ class BuilderSupervisor(threading.Thread):
                 "Can't report active task to master:\n%s",
                 traceback.format_exc(),
             )
+
+    def get_excluded_packages(self):
+        if 'excluded_packages' not in self.__cached_config:
+            uri = f'{self.__config.exclusions_url}/{self.__config.build_node_name}'
+            if file_url_exists(uri):
+                response = requests.get(uri).text
+                self.__cached_config['excluded_packages'] = response.splitlines()
+
+        return self.__cached_config.get('excluded_packages', [])
 
     def run(self):
         self.__generate_request_session()

@@ -14,6 +14,7 @@ import itertools
 import os
 import shutil
 import base64
+import requests
 import tempfile
 import urllib.request
 import urllib.parse
@@ -509,3 +510,26 @@ def is_gzip_file(file_path):
     """
     with open(file_path, 'rb') as fd:
         return binascii.hexlify(fd.read(2)) == b'1f8b'
+
+def file_url_exists(url):
+    """
+    Check if a file exists at the specified URL using a HEAD request.
+
+    Parameters
+    ----------
+    url : str
+        The URL to check.
+
+    Returns
+    -------
+    bool
+        True if the file exists, False otherwise.
+    """
+    try:
+        response = requests.head(url)
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except requests.RequestException as e:
+        return False

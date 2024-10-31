@@ -128,6 +128,11 @@ class BaseConfig(object):
         """
         return '{0}.{1}{2}'.format(platform.node(), os.getpid(), postfix)
 
+    @staticmethod
+    def get_node_name():
+        host_name = platform.node()
+        return host_name.rsplit('.', 2)[0]
+
     def __dir__(self):
         return list(self.__config.keys())
 
