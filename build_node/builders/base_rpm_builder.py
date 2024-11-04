@@ -15,7 +15,7 @@ import textwrap
 import traceback
 import time
 import urllib.parse
-from distutils.dir_util import copy_tree
+from shutil import copytree
 from typing import Optional, Tuple
 
 import validators
@@ -113,7 +113,7 @@ class BaseRPMBuilder(BaseBuilder):
         source_srpm_dir = os.path.join(self.task_dir, 'source_srpm')
         os.makedirs(source_srpm_dir)
         if downloaded_sources_dir == 'SOURCES':
-            copy_tree(sources_dir, source_srpm_dir)
+            copytree(sources_dir, source_srpm_dir)
         cwd = os.getcwd()
         try:
             os.chdir(source_srpm_dir)
@@ -128,9 +128,8 @@ class BaseRPMBuilder(BaseBuilder):
         spec_file = self.locate_spec_file(source_srpm_dir)
         return source_srpm_dir, spec_file
 
-    @measure_stage('build_all')
-    def build(self):
-        spec_file = None
+    @measure_stage('prepare_sources')
+    def prepare_sources(self):
         # There is the case when the git project has more than one spec file
         # In this case it will be found the spec by steps:
         #   1. 'spec_file' inside recipes, e.g. like in
@@ -199,11 +198,53 @@ class BaseRPMBuilder(BaseBuilder):
             else:
                 source_srpm_dir = self.unpack_sources()
                 spec_file = self.locate_spec_file(source_srpm_dir)
-            if self.task.platform.data.get('allow_sources_download'):
-                mock_defines = self.task.platform.data.get('definitions')
-                self.download_remote_sources(source_srpm_dir, spec_file,
-                                             mock_defines)
-            self.build_packages(source_srpm_dir, spec_file)
+        except BuildExcluded as e:
+            raise e
+        except Exception as e:
+            self.logger.warning(
+                'can not prepare package sources: %s\nTraceback:\n%s',
+                str(e), traceback.format_exc()
+            )
+            raise BuildError(str(e))
+        return source_srpm_dir, spec_file
+
+    @measure_stage('download_built_srpm')
+    def download_built_srpm(self):
+        srpm_dir = os.path.join(self.task_dir, 'source_rpm')
+        srpm_path = None
+        try:
+            srpm_path = download_file(self.task.built_srpm_url, srpm_dir)
+        except Exception:
+            self.logger.exception('Cannot download already built SRPM')
+        return srpm_path
+
+    @measure_stage('build_all')
+    def build(self):
+        mock_defines = self.task.platform.data.get('definitions')
+        try:
+            # While we can make if to do whether one thing or another,
+            # it's better to preserve previous behavior when we can build both
+            # sources and binaries in one flow
+            srpm_build_result = None
+            if self.task.arch == 'src' or not self.task.built_srpm_url:
+                source_srpm_dir, spec_file = self.prepare_sources()
+                if self.task.platform.data.get('allow_sources_download'):
+                    mock_defines = self.task.platform.data.get('definitions')
+                    self.download_remote_sources(source_srpm_dir, spec_file,
+                                                 mock_defines)
+                srpm_build_result = self.build_srpm(
+                    source_srpm_dir,
+                    spec_file=spec_file,
+                    definitions=mock_defines,
+                )
+            if not self.task.built_srpm_url and srpm_build_result:
+                srpm_path = srpm_build_result.srpm
+            elif self.task.built_srpm_url:
+                srpm_path = self.download_built_srpm()
+            else:
+                raise ValueError('SRPM is not found')
+            if self.task.arch != 'src':
+                self.build_binaries(srpm_path, definitions=mock_defines)
         except BuildExcluded as e:
             raise e
         except Exception as e:
@@ -225,19 +266,14 @@ class BaseRPMBuilder(BaseBuilder):
         )
 
     @measure_stage("build_srpm")
-    def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,
-                   definitions=None):
+    def build_srpm(self, sources_dir, spec_file=None, definitions=None):
         """
         Build a src-RPM package from the specified sources.
 
         Parameters
         ----------
-        mock_config : MockConfig
-            Mock chroot environment configuration.
         sources_dir : str
             Sources directory path.
-        resultdir : str
-            Directory to store build artifacts in.
         spec_file : str, optional
             Spec file path. It will be automatically located in the sources
             directory if omitted.
@@ -249,12 +285,33 @@ class BaseRPMBuilder(BaseBuilder):
         MockResult
             Mock command execution result.
         """
+        self.logger.info('Starting SRPM build')
+        srpm_result_dir = os.path.join(self.task_dir, 'srpm_result')
+        os.makedirs(srpm_result_dir)
+        srpm_mock_config = self.generate_mock_config(self.config, self.task,
+                                                     srpm_build=True)
+        srpm_build_result = None
         if not spec_file:
             spec_file = self.locate_spec_file(sources_dir)
-        with self.mock_supervisor.environment(mock_config) as mock_env:
-            return mock_env.buildsrpm(spec_file, sources_dir, resultdir,
-                                      definitions=definitions,
-                                      timeout=self.build_timeout)
+        try:
+            with self.mock_supervisor.environment(srpm_mock_config) as mock_env:
+                srpm_build_result = mock_env.buildsrpm(
+                    spec_file, sources_dir, srpm_result_dir,
+                    definitions=definitions,
+                    timeout=self.build_timeout,
+                )
+        except MockError as e:
+            excluded, reason = self.is_srpm_build_excluded(e)
+            if excluded:
+                raise BuildExcluded(reason)
+            srpm_build_result = e
+            raise BuildError('src-RPM build failed: {0}'.format(str(e)))
+        finally:
+            if srpm_build_result:
+                self.save_build_artifacts(srpm_build_result,
+                                          srpm_artifacts=True)
+        self.logger.info('SRPM build is finished')
+        return srpm_build_result
 
     @measure_stage('build_binaries')
     def build_binaries(self, srpm_path, definitions=None):
@@ -269,6 +326,7 @@ class BaseRPMBuilder(BaseBuilder):
         definitions : dict, optional
             Dictionary with mock optional definitions
         """
+        self.logger.info('Starting binary packages build')
         rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
         rpm_mock_config = self.generate_mock_config(self.config, self.task)
         rpm_build_result = None
@@ -286,52 +344,8 @@ class BaseRPMBuilder(BaseBuilder):
             finally:
                 if rpm_build_result:
                     self.save_build_artifacts(rpm_build_result)
-
-    @measure_stage('build_packages')
-    def build_packages(self, src_dir, spec_file=None):
-        """
-        Builds src-RPM and binary RPM packages, saves build artifacts to the
-        artifacts directory.
-
-        Parameters
-        ----------
-        src_dir : str
-            Path to the src-RPM sources.
-        spec_file : str, optional
-            Spec file path. It will be detected automatically if omitted.
-        """
-        mock_defines = self.task.platform.data.get('definitions')
-        self.logger.info('starting src-RPM build')
-        srpm_result_dir = os.path.join(self.task_dir, 'srpm_result')
-        os.makedirs(srpm_result_dir)
-        srpm_mock_config = self.generate_mock_config(self.config, self.task,
-                                                     srpm_build=True)
-        srpm_build_result = None
-        try:
-            srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
-                                                srpm_result_dir,
-                                                spec_file=spec_file,
-                                                definitions=mock_defines)
-        except MockError as e:
-            excluded, reason = self.is_srpm_build_excluded(e)
-            if excluded:
-                raise BuildExcluded(reason)
-            srpm_build_result = e
-            raise BuildError('src-RPM build failed: {0}'.format(str(e)))
-        finally:
-            if srpm_build_result:
-                self.save_build_artifacts(srpm_build_result,
-                                          srpm_artifacts=True)
-        srpm_path = srpm_build_result.srpm
-        self.logger.info('src-RPM %s was successfully built', srpm_path)
-        if self.task.arch == 'src':
-            return
-        excluded, reason = self.is_build_excluded(srpm_path)
-        if excluded:
-            raise BuildExcluded(reason)
-        self.logger.info('starting RPM build')
-        self.build_binaries(srpm_path, mock_defines)
-        self.logger.info('RPM build completed')
+        self.logger.info('Binary packages build is finished')
+        return rpm_build_result
 
     @measure_stage("sources_unpack")
     def unpack_sources(self):
