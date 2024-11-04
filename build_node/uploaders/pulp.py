@@ -309,14 +309,14 @@ class PulpRpmUploader(PulpBaseUploader):
         """
         success_uploads = []
         errored_uploads = []
-        self._logger.info('Starting files upload')
+        self._logger.debug('Starting files upload')
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {
                 executor.submit(self.upload_single_file, artifact): artifact
                 for artifact in self.get_artifacts_list(
                     artifacts_dir, only_logs=only_logs)
             }
-            self._logger.info('Futures: %s', futures)
+            self._logger.debug('Futures: %s', futures)
             for future in as_completed(futures):
                 artifact = futures[future]
                 try:
@@ -325,7 +325,7 @@ class PulpRpmUploader(PulpBaseUploader):
                     self._logger.exception(
                         'Cannot upload %s', artifact, exc_info=e)
                     errored_uploads.append(artifact)
-        self._logger.info('Upload has been finished')
+        self._logger.debug('Upload has been finished')
         # TODO: Decide what to do with successfully uploaded artifacts
         #  in case of errors during upload.
         if errored_uploads:

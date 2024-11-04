@@ -172,10 +172,8 @@ class BuildNodeBuilder(threading.Thread):
                         )
                 build_artifacts = []
                 try:
-                    self.__logger.info('Start using __upload_artifacts function')
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, only_logs=only_logs)
-                    self.__logger.info('Stop using __upload_artifacts function')
                 except Exception:
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
