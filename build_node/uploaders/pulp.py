@@ -316,6 +316,7 @@ class PulpRpmUploader(PulpBaseUploader):
                 for artifact in self.get_artifacts_list(
                     artifacts_dir, only_logs=only_logs)
             }
+            self._logger.info('Futures: %s', futures)
             for future in as_completed(futures):
                 artifact = futures[future]
                 try:

@@ -172,8 +172,10 @@ class BuildNodeBuilder(threading.Thread):
                         )
                 build_artifacts = []
                 try:
+                    self.__logger.info('Start using __upload_artifacts function')
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, only_logs=only_logs)
+                    self.__logger.info('Stop using __upload_artifacts function')
                 except Exception:
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
@@ -263,6 +265,7 @@ class BuildNodeBuilder(threading.Thread):
     @measure_stage("upload")
     def __upload_artifacts(self, artifacts_dir,
                            only_logs: bool = False):
+        self.__logger.debug('Uploader: %s', self._pulp_uploader)
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
         return artifacts
