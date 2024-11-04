@@ -211,6 +211,7 @@ class BaseRPMBuilder(BaseBuilder):
     @measure_stage('download_built_srpm')
     def download_built_srpm(self):
         srpm_dir = os.path.join(self.task_dir, 'source_rpm')
+        os.makedirs(srpm_dir)
         srpm_path = None
         try:
             srpm_path = download_file(self.task.built_srpm_url, srpm_dir)
@@ -242,6 +243,8 @@ class BaseRPMBuilder(BaseBuilder):
             elif self.task.built_srpm_url:
                 srpm_path = self.download_built_srpm()
             else:
+                raise ValueError('SRPM is not found')
+            if not srpm_path:
                 raise ValueError('SRPM is not found')
             if self.task.arch != 'src':
                 self.build_binaries(srpm_path, definitions=mock_defines)
