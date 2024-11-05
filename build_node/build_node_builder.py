@@ -16,11 +16,11 @@ import pprint
 import random
 import threading
 import typing
+from urllib3.util.retry import Retry
 
 from immudb_wrapper import ImmudbWrapper
 import requests
 import requests.adapters
-from requests.packages.urllib3.util.retry import Retry
 from sentry_sdk import capture_exception
 
 from build_node import constants
@@ -42,7 +42,7 @@ class BuildNodeBuilder(threading.Thread):
     """Build thread."""
 
     def __init__(self, config, thread_num, terminated_event,
-                 graceful_terminated_event):
+                 graceful_terminated_event, verbose: bool = False):
         """
         Build thread initialization.
 
@@ -63,6 +63,7 @@ class BuildNodeBuilder(threading.Thread):
         self.__working_dir = os.path.join(config.working_dir,
                                           'builder-{0}'.format(thread_num))
         self.init_working_dir(self.__working_dir)
+        self.__verbose = verbose
         self.__logger = None
         self.__current_task_id = None
         # current task processing start timestamp
@@ -263,7 +264,6 @@ class BuildNodeBuilder(threading.Thread):
     @measure_stage("upload")
     def __upload_artifacts(self, artifacts_dir,
                            only_logs: bool = False):
-        self.__logger.debug('Uploader: %s', self._pulp_uploader)
         artifacts = self._pulp_uploader.upload(
             artifacts_dir, only_logs=only_logs)
         return artifacts
@@ -420,8 +420,7 @@ class BuildNodeBuilder(threading.Thread):
         task_handler.close()
         self.__logger.handlers.remove(task_handler)
 
-    @staticmethod
-    def init_thread_logger(log_file):
+    def init_thread_logger(self, log_file):
         """
         Build thread logger initialization.
 
@@ -438,12 +437,13 @@ class BuildNodeBuilder(threading.Thread):
         logger = logging.getLogger('bt-{0}-logger'.
                                    format(threading.current_thread().name))
         logger.handlers = []
-        logger.setLevel(logging.DEBUG)
+        log_level = logging.DEBUG if self.__verbose else logging.INFO
+        logger.setLevel(log_level)
         formatter = logging.Formatter("%(asctime)s %(levelname)-8s: "
                                       "%(message)s",
                                       "%H:%M:%S %d.%m.%y")
         handler = logging.FileHandler(log_file)
-        handler.setLevel(logging.DEBUG)
+        handler.setLevel(log_level)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         return logger

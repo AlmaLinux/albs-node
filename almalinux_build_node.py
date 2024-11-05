@@ -158,8 +158,11 @@ def main(sys_args):
     node_globals.init_supervisors(config)
     builders = []
     for i in range(0, config.threads_count):
-        builder = BuildNodeBuilder(config, i, node_terminated,
-                                   node_graceful_terminated)
+        builder = BuildNodeBuilder(
+            config, i, node_terminated,
+            node_graceful_terminated,
+            verbose=args.verbose,
+        )
         builders.append(builder)
         builder.start()
 
