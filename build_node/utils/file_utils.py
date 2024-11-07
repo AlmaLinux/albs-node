@@ -6,33 +6,43 @@
 Various utility functions for working with files.
 """
 
+import base64
 import binascii
-import re
 import errno
+import ftplib
 import getpass
 import itertools
 import os
+import re
 import shutil
-import base64
-import requests
 import tempfile
-import urllib.request
-import urllib.parse
 import urllib.error
-import ftplib
-
+import urllib.parse
+import urllib.request
 from glob import glob
 
 import plumbum
 import pycurl
+import requests
 
 from build_node.utils.hashing import get_hasher
 
-
-__all__ = ['chown_recursive', 'clean_dir', 'rm_sudo', 'hash_file',
-           'filter_files', 'normalize_path', 'safe_mkdir', 'safe_symlink',
-           'find_files', 'urljoin_path', 'touch_file', 'download_file',
-           'copy_dir_recursive', 'is_gzip_file']
+__all__ = [
+    'chown_recursive',
+    'clean_dir',
+    'rm_sudo',
+    'hash_file',
+    'filter_files',
+    'normalize_path',
+    'safe_mkdir',
+    'safe_symlink',
+    'find_files',
+    'urljoin_path',
+    'touch_file',
+    'download_file',
+    'copy_dir_recursive',
+    'is_gzip_file',
+]
 
 
 def chown_recursive(path, owner=None, group=None):
@@ -92,8 +102,11 @@ def rm_sudo(path):
 
 
 def filter_files(directory_path, filter_fn):
-    return [os.path.join(directory_path, f) for f in os.listdir(directory_path)
-            if filter_fn(f)]
+    return [
+        os.path.join(directory_path, f)
+        for f in os.listdir(directory_path)
+        if filter_fn(f)
+    ]
 
 
 def hash_file(file_path, hasher=None, hash_type=None, buff_size=1048576):
@@ -126,6 +139,7 @@ def hash_file(file_path, hasher=None, hash_type=None, buff_size=1048576):
                 buff = buff.encode('utf')
             hasher.update(buff)
             buff = _fd.read(buff_size)
+
     if isinstance(file_path, str):
         with open(file_path, "rb") as fd:
             feed_hasher(fd)
@@ -248,17 +262,31 @@ def urljoin_path(base_url, *args):
         A full URL combined from a base URL and relative URL(s).
     """
     parsed_base = urllib.parse.urlsplit(base_url)
-    paths = itertools.chain((parsed_base.path,),
-                            [urllib.parse.urlsplit(a).path for a in args])
+    paths = itertools.chain(
+        (parsed_base.path,), [urllib.parse.urlsplit(a).path for a in args]
+    )
     path = '/'.join(p.strip('/') for p in paths if p)
-    return urllib.parse.urlunsplit((parsed_base.scheme, parsed_base.netloc,
-                                    path, parsed_base.query,
-                                    parsed_base.fragment))
+    return urllib.parse.urlunsplit((
+        parsed_base.scheme,
+        parsed_base.netloc,
+        path,
+        parsed_base.query,
+        parsed_base.fragment,
+    ))
 
 
-def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
-                  timeout=300, http_header=None, login=None, password=None,
-                  no_ssl_verify=False):
+def download_file(
+    url,
+    dst,
+    ssl_cert=None,
+    ssl_key=None,
+    ca_info=None,
+    timeout=300,
+    http_header=None,
+    login=None,
+    password=None,
+    no_ssl_verify=False,
+):
     """
     Downloads remote or copies local file to the specified destination. If
     destination is a file or file-like object this function will write data
@@ -327,12 +355,21 @@ def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
             real_url = ftp_file_download(url, dst_fd)
         elif url_scheme in ('http', 'https'):
             real_url = http_file_download(
-                url, dst_fd, timeout, login, password, http_header, ssl_cert,
-                ssl_key, ca_info, no_ssl_verify
+                url,
+                dst_fd,
+                timeout,
+                login,
+                password,
+                http_header,
+                ssl_cert,
+                ssl_key,
+                ca_info,
+                no_ssl_verify,
             )
         else:
-            raise NotImplementedError('unsupported URL scheme "{0}"'.
-                                      format(url_scheme))
+            raise NotImplementedError(
+                'unsupported URL scheme "{0}"'.format(url_scheme)
+            )
     finally:
         # close the destination file descriptor if it was created internally
         if not hasattr(dst, 'write'):
@@ -355,9 +392,18 @@ def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
     return file_name
 
 
-def http_file_download(url, fd, timeout=300, login=None, password=None,
-                       http_header=None, ssl_cert=None, ssl_key=None,
-                       ca_info=None, no_ssl_verify=None):
+def http_file_download(
+    url,
+    fd,
+    timeout=300,
+    login=None,
+    password=None,
+    http_header=None,
+    ssl_cert=None,
+    ssl_key=None,
+    ca_info=None,
+    no_ssl_verify=None,
+):
     """
     Download remote http(s) file to the specified file-like object.
 
@@ -390,10 +436,12 @@ def http_file_download(url, fd, timeout=300, login=None, password=None,
         Real download url.
     """
     if login and password:
-        auth_hash = base64.b64encode('{0}:{1}'.format(
-            login, password).encode('utf-8'))
+        auth_hash = base64.b64encode(
+            '{0}:{1}'.format(login, password).encode('utf-8')
+        )
         auth_header = 'Authorization: Basic {0}'.format(
-            auth_hash.decode('utf-8'))
+            auth_hash.decode('utf-8')
+        )
         if not http_header:
             http_header = []
         http_header.append(auth_header)
@@ -452,8 +500,9 @@ def ftp_file_download(url, fd):
     ftp = ftplib.FTP(url_parsed.netloc)
     ftp.login()
     ftp.cwd(os.path.dirname(url_parsed.path))
-    ftp.retrbinary('RETR {0}'.format(os.path.basename(url_parsed.path)),
-                   fd.write)
+    ftp.retrbinary(
+        'RETR {0}'.format(os.path.basename(url_parsed.path)), fd.write
+    )
     ftp.quit()
     return url
 
@@ -511,6 +560,7 @@ def is_gzip_file(file_path):
     with open(file_path, 'rb') as fd:
         return binascii.hexlify(fd.read(2)) == b'1f8b'
 
+
 def file_url_exists(url):
     """
     Check if a file exists at the specified URL using a HEAD request.
@@ -527,9 +577,6 @@ def file_url_exists(url):
     """
     try:
         response = requests.head(url)
-        if response.status_code == 200:
-            return True
-        else:
-            return False
+        return response.status_code == 200
     except requests.RequestException as e:
         return False
