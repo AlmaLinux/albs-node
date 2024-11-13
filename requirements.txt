@@ -15,7 +15,7 @@ pycurl==7.45.3
 pyicu==2.14
 pyyaml==6.0.2
 filesplit==3.0.2
-pulpcore-client==3.67.0
+pulpcore-client==3.68.0
 pydantic==2.9.2
 lxml==5.3.0
 python-rpm-spec==0.15.0
