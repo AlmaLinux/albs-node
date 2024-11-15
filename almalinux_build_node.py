@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+import queue
 import signal
 import sys
 import time
@@ -157,13 +158,15 @@ def main(sys_args):
 
     node_globals.init_supervisors(config)
     builders = []
+    task_queue = queue.Queue()
+
     for i in range(0, config.threads_count):
         builder = BuildNodeBuilder(config, i, node_terminated,
-                                   node_graceful_terminated)
+                                   node_graceful_terminated, task_queue,)
         builders.append(builder)
         builder.start()
 
-    builder_supervisor = BuilderSupervisor(config, builders, node_terminated)
+    builder_supervisor = BuilderSupervisor(config, builders, node_terminated, task_queue,)
     builder_supervisor.start()
 
     global running

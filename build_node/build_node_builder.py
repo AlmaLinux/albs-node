@@ -41,8 +41,14 @@ class BuildNodeBuilder(threading.Thread):
 
     """Build thread."""
 
-    def __init__(self, config, thread_num, terminated_event,
-                 graceful_terminated_event):
+    def __init__(
+        self,
+        config,
+        thread_num,
+        terminated_event,
+        graceful_terminated_event,
+        task_queue,
+    ):
         """
         Build thread initialization.
 
@@ -82,6 +88,7 @@ class BuildNodeBuilder(threading.Thread):
         self.__terminated_event = terminated_event
         self.__graceful_terminated_event = graceful_terminated_event
         self.__hostname = platform.node()
+        self.__task_queue = task_queue
 
     def run(self):
         log_file = os.path.join(self.__working_dir,
@@ -268,20 +275,9 @@ class BuildNodeBuilder(threading.Thread):
         return artifacts
 
     def __request_task(self):
-        supported_arches = [self.__config.base_arch]
-        if self.__config.base_arch == 'x86_64':
-            supported_arches.append('i686')
-        if self.__config.build_src:
-            supported_arches.append('src')
-        task = self.__call_master(
-            'get_task',
-            err_msg="Can't request new task from master:",
-            supported_arches=supported_arches,
-        )
-        if not task:
+        if self.__task_queue.empty():
             return
-        if not task.get('is_secure_boot'):
-            task['is_secure_boot'] = False
+        task = self.__task_queue.get()
         return Task(**task)
 
     def __report_excluded_task(self, task, artifacts):
