@@ -1,6 +1,6 @@
-import traceback
-import threading
 import logging
+import threading
+import traceback
 import urllib.parse
 
 import requests
@@ -18,7 +18,7 @@ class BuilderSupervisor(threading.Thread):
         builders,
         terminated_event,
         task_queue,
-        ):
+    ):
         self.config = config
         self.builders = builders
         self.terminated_event = terminated_event
@@ -34,8 +34,7 @@ class BuilderSupervisor(threading.Thread):
             backoff_factor=constants.BACKOFF_FACTOR,
             raise_on_status=True,
         )
-        adapter = requests.adapters.HTTPAdapter(
-            max_retries=retry_strategy)
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
         self.__session = requests.Session()
         self.__session.headers.update({
             'Authorization': f'Bearer {self.config.jwt_token}',
@@ -58,18 +57,21 @@ class BuilderSupervisor(threading.Thread):
         }
         try:
             response = self.__session.post(
-                full_url, json=data, timeout=self.config.request_timeout)
+                full_url, json=data, timeout=self.config.request_timeout
+            )
             response.raise_for_status()
             return response.json()
 
         except Exception:
             logging.error(
                 "Can't report active task to master:\n%s",
-                traceback.format_exc()
+                traceback.format_exc(),
             )
 
     def get_active_tasks(self):
-        return set([b.current_task_id for b in self.builders]) - set([None, ])
+        return set([b.current_task_id for b in self.builders]) - set([
+            None,
+        ])
 
     def __report_active_tasks(self):
         active_tasks = self.get_active_tasks()
@@ -80,11 +82,12 @@ class BuilderSupervisor(threading.Thread):
         data = {'active_tasks': [int(item) for item in active_tasks]}
         try:
             self.__session.post(
-                full_url, json=data, timeout=self.config.request_timeout)
+                full_url, json=data, timeout=self.config.request_timeout
+            )
         except Exception:
             logging.error(
                 "Can't report active task to master:\n%s",
-                traceback.format_exc()
+                traceback.format_exc(),
             )
 
     def run(self):

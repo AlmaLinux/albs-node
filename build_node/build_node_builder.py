@@ -10,35 +10,34 @@ import datetime
 import gzip
 import logging
 import os
-import urllib.parse
 import platform
 import pprint
 import random
 import threading
 import typing
+import urllib.parse
 
-from immudb_wrapper import ImmudbWrapper
 import requests
 import requests.adapters
+from immudb_wrapper import ImmudbWrapper
 from requests.packages.urllib3.util.retry import Retry
 from sentry_sdk import capture_exception
 
 from build_node import constants
-from build_node.builders.base_rpm_builder import BaseRPMBuilder
-from build_node.builders.base_builder import measure_stage
 from build_node.build_node_errors import BuildError, BuildExcluded
+from build_node.builders.base_builder import measure_stage
+from build_node.builders.base_rpm_builder import BaseRPMBuilder
+from build_node.models import Task
 from build_node.uploaders.pulp import PulpRpmUploader
+from build_node.utils.codenotary import notarize_build_artifacts
 from build_node.utils.file_utils import (
     clean_dir,
     filter_files,
     rm_sudo,
 )
-from build_node.models import Task
-from build_node.utils.codenotary import notarize_build_artifacts
 
 
 class BuildNodeBuilder(threading.Thread):
-
     """Build thread."""
 
     def __init__(
@@ -63,11 +62,13 @@ class BuildNodeBuilder(threading.Thread):
         graceful_terminated_event : threading.Event
             Shows, if process got "kill -10" signal.
         """
-        super(BuildNodeBuilder, self).__init__(name='Builder-{0}'.format(
-            thread_num))
+        super(BuildNodeBuilder, self).__init__(
+            name='Builder-{0}'.format(thread_num)
+        )
         self.__config = config
-        self.__working_dir = os.path.join(config.working_dir,
-                                          'builder-{0}'.format(thread_num))
+        self.__working_dir = os.path.join(
+            config.working_dir, 'builder-{0}'.format(thread_num)
+        )
         self.init_working_dir(self.__working_dir)
         self.__logger = None
         self.__current_task_id = None
@@ -78,11 +79,15 @@ class BuildNodeBuilder(threading.Thread):
         self.__session = None
         self._immudb_wrapper = None
         self._codenotary_enabled = self.__config.codenotary_enabled
-        self._build_stats: typing.Optional[typing.Dict[str, typing.Dict[str, str]]] = None
+        self._build_stats: typing.Optional[
+            typing.Dict[str, typing.Dict[str, str]]
+        ] = None
         self._pulp_uploader = PulpRpmUploader(
-            self.__config.pulp_host, self.__config.pulp_user,
-            self.__config.pulp_password, self.__config.pulp_chunk_size,
-            self.__config.pulp_uploader_max_workers
+            self.__config.pulp_host,
+            self.__config.pulp_user,
+            self.__config.pulp_password,
+            self.__config.pulp_chunk_size,
+            self.__config.pulp_uploader_max_workers,
         )
 
         self.__terminated_event = terminated_event
@@ -91,8 +96,9 @@ class BuildNodeBuilder(threading.Thread):
         self.__task_queue = task_queue
 
     def run(self):
-        log_file = os.path.join(self.__working_dir,
-                                'bt-{0}.log'.format(self.name))
+        log_file = os.path.join(
+            self.__working_dir, 'bt-{0}.log'.format(self.name)
+        )
         self.__logger = self.init_thread_logger(log_file)
         if self._codenotary_enabled:
             self._immudb_wrapper = ImmudbWrapper(
@@ -117,8 +123,7 @@ class BuildNodeBuilder(threading.Thread):
             ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
             artifacts_dir = os.path.join(task_dir, 'artifacts')
-            task_log_file = os.path.join(task_dir,
-                                         f'albs.{task.id}.{ts}.log')
+            task_log_file = os.path.join(task_dir, f'albs.{task.id}.{ts}.log')
             task_log_handler = None
             success = False
             excluded = False
@@ -146,8 +151,13 @@ class BuildNodeBuilder(threading.Thread):
                 )
                 capture_exception(e)
             finally:
-                only_logs = (not (bool(filter_files(
-                    artifacts_dir, lambda f: f.endswith('.rpm')))))
+                only_logs = not (
+                    bool(
+                        filter_files(
+                            artifacts_dir, lambda f: f.endswith('.rpm')
+                        )
+                    )
+                )
                 if success is False:
                     only_logs = True
                 notarized_artifacts = {}
@@ -180,7 +190,8 @@ class BuildNodeBuilder(threading.Thread):
                 build_artifacts = []
                 try:
                     build_artifacts = self.__upload_artifacts(
-                        artifacts_dir, only_logs=only_logs)
+                        artifacts_dir, only_logs=only_logs
+                    )
                 except Exception:
                     self.__logger.exception('Cannot upload task artifacts')
                     build_artifacts = []
@@ -188,7 +199,9 @@ class BuildNodeBuilder(threading.Thread):
                 finally:
                     try:
                         build_artifacts.append(
-                            self._pulp_uploader.upload_single_file(task_log_file)
+                            self._pulp_uploader.upload_single_file(
+                                task_log_file
+                            )
                         )
                     except Exception as e:
                         self.__logger.exception(
@@ -210,14 +223,15 @@ class BuildNodeBuilder(threading.Thread):
                 })
                 try:
                     if not success and excluded:
-                        self.__report_excluded_task(
-                            task, build_artifacts)
+                        self.__report_excluded_task(task, build_artifacts)
                     else:
                         self.__report_done_task(
-                            task, success=success, artifacts=build_artifacts)
+                            task, success=success, artifacts=build_artifacts
+                        )
                 except Exception:
                     self.__logger.exception(
-                        'Cannot report task status to the main node')
+                        'Cannot report task status to the main node'
+                    )
                 if task_log_handler:
                     self.__close_task_logger(task_log_handler)
                 self.__current_task_id = None
@@ -262,16 +276,21 @@ class BuildNodeBuilder(threading.Thread):
             Build artifacts storage directory path.
         """
         self.__logger.info('building on the %s node', platform.node())
-        self.__builder = BaseRPMBuilder(self.__config, self.__logger, task,
-                                       task_dir, artifacts_dir,
-                                       self._immudb_wrapper)
+        self.__builder = BaseRPMBuilder(
+            self.__config,
+            self.__logger,
+            task,
+            task_dir,
+            artifacts_dir,
+            self._immudb_wrapper,
+        )
         self.__builder.build()
 
     @measure_stage("upload")
-    def __upload_artifacts(self, artifacts_dir,
-                           only_logs: bool = False):
+    def __upload_artifacts(self, artifacts_dir, only_logs: bool = False):
         artifacts = self._pulp_uploader.upload(
-            artifacts_dir, only_logs=only_logs)
+            artifacts_dir, only_logs=only_logs
+        )
         return artifacts
 
     def __request_task(self):
@@ -322,8 +341,7 @@ class BuildNodeBuilder(threading.Thread):
             backoff_factor=constants.BACKOFF_FACTOR,
             raise_on_status=True,
         )
-        adapter = requests.adapters.HTTPAdapter(
-            max_retries=retry_strategy)
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
         self.__session = requests.Session()
         self.__session.headers.update({
             'Authorization': f'Bearer {self.__config.jwt_token}',
@@ -332,24 +350,21 @@ class BuildNodeBuilder(threading.Thread):
         self.__session.mount('https://', adapter)
 
     def __call_master(
-            self,
-            endpoint,
-            err_msg: typing.Optional[str] = '',
-            **parameters,
+        self,
+        endpoint,
+        err_msg: typing.Optional[str] = '',
+        **parameters,
     ):
         full_url = urllib.parse.urljoin(
-            self.__config.master_url, f'build_node/{endpoint}')
-        if endpoint in (
-            'build_done',
-            'get_task'
-        ):
+            self.__config.master_url, f'build_node/{endpoint}'
+        )
+        if endpoint in ('build_done', 'get_task'):
             session_method = self.__session.post
         else:
             session_method = self.__session.get
         try:
             response = session_method(
-                full_url, json=parameters,
-                timeout=self.__config.request_timeout
+                full_url, json=parameters, timeout=self.__config.request_timeout
             )
             # Special case when build was already done
             if response.status_code == requests.codes.conflict:
@@ -368,12 +383,10 @@ class BuildNodeBuilder(threading.Thread):
         builds.
         """
         if os.path.exists(working_dir):
-            logging.debug('cleaning the %s working directory',
-                          working_dir)
+            logging.debug('cleaning the %s working directory', working_dir)
             clean_dir(working_dir)
         else:
-            logging.debug('creating the %s working directory',
-                          working_dir)
+            logging.debug('creating the %s working directory', working_dir)
             os.makedirs(working_dir, 0o750)
 
     def __init_task_logger(self, log_file):
@@ -395,8 +408,9 @@ class BuildNodeBuilder(threading.Thread):
             gzip.open(log_file, 'wt', encoding='utf-8'),
         )
         handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter("%(asctime)s %(levelname)-8s]: "
-                                      "%(message)s", "%H:%M:%S %d.%m.%y")
+        formatter = logging.Formatter(
+            "%(asctime)s %(levelname)-8s]: %(message)s", "%H:%M:%S %d.%m.%y"
+        )
         handler.setFormatter(formatter)
         self.__logger.addHandler(handler)
         return handler
@@ -430,13 +444,14 @@ class BuildNodeBuilder(threading.Thread):
         logging.Logger
             Build thread logger.
         """
-        logger = logging.getLogger('bt-{0}-logger'.
-                                   format(threading.current_thread().name))
+        logger = logging.getLogger(
+            'bt-{0}-logger'.format(threading.current_thread().name)
+        )
         logger.handlers = []
         logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter("%(asctime)s %(levelname)-8s: "
-                                      "%(message)s",
-                                      "%H:%M:%S %d.%m.%y")
+        formatter = logging.Formatter(
+            "%(asctime)s %(levelname)-8s: %(message)s", "%H:%M:%S %d.%m.%y"
+        )
         handler = logging.FileHandler(log_file)
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(formatter)
