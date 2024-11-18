@@ -43,30 +43,30 @@ class BuilderSupervisor(threading.Thread):
         self.__session.mount('https://', adapter)
 
     def __request_build_task(self):
-        supported_arches = [self.config.base_arch]
-        if self.config.base_arch == 'x86_64':
-            supported_arches.append('i686')
-        if self.config.build_src:
-            supported_arches.append('src')
-        full_url = urllib.parse.urljoin(
-            self.config.master_url, 'build_node/get_task'
-        )
-        data = {
-            'supported_arches': supported_arches,
-            'excluded_packages': [],
-        }
-        try:
-            response = self.__session.post(
-                full_url, json=data, timeout=self.config.request_timeout
+        if not self.__task_queue.full():
+            supported_arches = [self.config.base_arch]
+            if self.config.base_arch == 'x86_64':
+                supported_arches.append('i686')
+            if self.config.build_src:
+                supported_arches.append('src')
+            full_url = urllib.parse.urljoin(
+                self.config.master_url, 'build_node/get_task'
             )
-            response.raise_for_status()
-            return response.json()
-
-        except Exception:
-            logging.error(
-                "Can't report active task to master:\n%s",
-                traceback.format_exc(),
-            )
+            data = {
+                'supported_arches': supported_arches,
+                'excluded_packages': [],
+            }
+            try:
+                response = self.__session.post(
+                    full_url, json=data, timeout=self.config.request_timeout
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception:
+                logging.error(
+                    "Can't report active task to master:\n%s",
+                    traceback.format_exc(),
+                )
 
     def get_active_tasks(self):
         return set([b.current_task_id for b in self.builders]) - set([

@@ -169,12 +169,12 @@ def main(sys_args):
 
     node_globals.init_supervisors(config)
     builders = []
-    task_queue = queue.Queue()
+    task_queue = queue.Queue(maxsize=config.queue_size)
 
-    for i in range(0, config.threads_count):
+    for thread_num in range(0, config.threads_count):
         builder = BuildNodeBuilder(
             config,
-            i,
+            thread_num,
             node_terminated,
             node_graceful_terminated,
             task_queue,
