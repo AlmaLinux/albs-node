@@ -9,16 +9,16 @@ import time
 from threading import Event
 
 import sentry_sdk
+from build_slave.errors import BuildError, BuildExcluded
+from build_slave.mock.mock_environment import MockError
+from build_slave.utils.file_utils import chown_recursive, rm_sudo
+from build_slave.utils.spec_parser import SpecParseError
 
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
-from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.build_node_supervisor import BuilderSupervisor
-from build_node.mock.mock_environment import MockError
-from build_node.utils.file_utils import chown_recursive, rm_sudo
 from build_node.utils.config import locate_config_file
-from build_node.utils.spec_parser import SpecParseError
 
 running = True
 
@@ -33,16 +33,21 @@ def init_args_parser():
     """
     parser = argparse.ArgumentParser(
         prog='castor_build_node',
-        description='CloudLinux Build System build node'
+        description='AlmaLinux Build System build node',
     )
     parser.add_argument('-c', '--config', help='configuration file path')
     parser.add_argument('-i', '--id', help='build node unique identifier')
     parser.add_argument('-m', '--master', help='build server connection URL')
-    parser.add_argument('-t', '--threads', type=int,
-                        help='build threads count')
+    parser.add_argument(
+        '-t', '--threads', type=int, help='build threads count'
+    )
     parser.add_argument('-w', '--working-dir', help='working directory path')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='enable additional debug output')
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        action='store_true',
+        help='enable additional debug output',
+    )
     return parser
 
 
@@ -93,12 +98,16 @@ def init_working_dir(config):
                 #   rm: cannot remove 'test/test.txt': Permission denied
                 rm_sudo(os.path.join(working_dir, name))
     else:
-        logging.debug('creating the {0} working directory'.
-                      format(config.working_dir))
+        logging.debug(
+            'creating the {0} working directory'.format(config.working_dir)
+        )
         os.makedirs(config.working_dir, 0o750)
     if not os.path.exists(config.mock_configs_storage_dir):
-        logging.debug('creating the {0} mock configuration files directory'.
-                      format(config.mock_configs_storage_dir))
+        logging.debug(
+            'creating the {0} mock configuration files directory'.format(
+                config.mock_configs_storage_dir
+            )
+        )
         os.makedirs(config.mock_configs_storage_dir, 0o750)
 
 
@@ -125,8 +134,12 @@ def main(sys_args):
     args = args_parser.parse_args(sys_args)
     try:
         config_file = locate_config_file('build_node', args.config)
-        config = BuildNodeConfig(config_file, master_url=args.master,
-                                 node_id=args.id, threads_count=args.threads)
+        config = BuildNodeConfig(
+            config_file,
+            master_url=args.master,
+            node_id=args.id,
+            threads_count=args.threads,
+        )
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
         return 2
@@ -158,8 +171,12 @@ def main(sys_args):
     node_globals.init_supervisors(config)
     builders = []
     for i in range(0, config.threads_count):
-        builder = BuildNodeBuilder(config, i, node_terminated,
-                                   node_graceful_terminated)
+        builder = BuildNodeBuilder(
+            config,
+            i,
+            node_terminated,
+            node_graceful_terminated,
+        )
         builders.append(builder)
         builder.start()
 
@@ -173,14 +190,16 @@ def main(sys_args):
         threads = builders + [builder_supervisor]
         if all([t.is_alive() for t in threads]):
             continue
-        if (all([not b.is_alive() for b in builders])
-                or not builder_supervisor.is_alive()):
+        if (
+            all([not b.is_alive() for b in builders])
+            or not builder_supervisor.is_alive()
+        ):
             logging.error('All builders are dead, exiting')
             running = False
             exit_code = 1
             for b in builders:
                 b.join(0.1)
-            builder_supervisor.join(1.)
+            builder_supervisor.join(1.0)
     return exit_code
 
 
