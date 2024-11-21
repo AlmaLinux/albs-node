@@ -2,9 +2,9 @@
 # author: Eugene Zamriy <ezamriy@cloudlinux.com>
 # created: 2019-04-19
 
-"""CloudLinux Build System node global variables."""
+"""AlmaLinux Build System node global variables."""
 
-from build_node.mock.supervisor import MockSupervisor
+from build_slave.mock.supervisor import MockSupervisor
 
 __all__ = ['init_supervisors', 'MOCK_SUPERVISOR']
 
@@ -23,4 +23,7 @@ def init_supervisors(config):
         Build node configuration file.
     """
     global MOCK_SUPERVISOR
-    MOCK_SUPERVISOR = MockSupervisor(config.mock_configs_storage_dir, config.base_arch)
+    MOCK_SUPERVISOR = MockSupervisor(
+        storage_dir=config.mock_configs_storage_dir,
+        host_arch=config.base_arch,
+    )
