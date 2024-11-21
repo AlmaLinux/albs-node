@@ -13,6 +13,7 @@ from build_node.utils.config import BaseConfig
 
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
+DEFAULT_QUEUE_SIZE = DEFAULT_THREADS_COUNT + 1
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
 DEFAULT_SENTRY_DSN = ''
 DEFAULT_SENTRY_ENVIRONMENT = 'dev'
@@ -93,6 +94,7 @@ class BuildNodeConfig(BaseConfig):
             'npm_proxy': '',
             'node_id': self.generate_node_id(),
             'threads_count': DEFAULT_THREADS_COUNT,
+            'queue_size': DEFAULT_QUEUE_SIZE,
             'working_dir': DEFAULT_WORKING_DIR,
             # NOTE: those parameters are added for old Build System code
             #       compatibility
@@ -130,6 +132,7 @@ class BuildNodeConfig(BaseConfig):
             'npm_proxy': {'type': 'string'},
             'node_id': {'type': 'string', 'required': True},
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
+            'queue_size': {'type': 'integer', 'min': 2, 'required': True},
             'working_dir': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
             'git_repos_cache_dir': {'type': 'string', 'required': True},
