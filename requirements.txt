@@ -16,7 +16,7 @@ pyicu==2.14
 pyyaml==6.0.2
 filesplit==3.0.2
 pulpcore-client==3.67.0
-pydantic==2.9.2
+pydantic==2.10.2
 lxml==5.3.0
 python-rpm-spec==0.15.0
 git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.4#egg=immudb_wrapper
