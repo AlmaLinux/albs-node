@@ -19,7 +19,6 @@ __all__ = ['locate_config_file', 'BaseConfig']
 
 
 class ConfigValidator(cerberus.Validator):
-
     """
     Custom validator for CloudLinux Build System configuration objects.
     """
@@ -70,8 +69,9 @@ def locate_config_file(component, config_path=None):
     if config_path:
         config_path = normalize_path(config_path)
         if not os.path.exists(config_path):
-            raise ValueError('configuration file {0} is not found'.
-                             format(config_path))
+            raise ValueError(
+                'configuration file {0} is not found'.format(config_path)
+            )
         return config_path
     config_path = normalize_path('~/.config/castor/{0}.yml'.format(component))
     if os.path.exists(config_path):
@@ -79,11 +79,11 @@ def locate_config_file(component, config_path=None):
 
 
 class BaseConfig(object):
-
     """Base configuration object for Build System processes."""
 
-    def __init__(self, default_config, config_path=None, schema=None,
-                 **cmd_args):
+    def __init__(
+        self, default_config, config_path=None, schema=None, **cmd_args
+    ):
         """
         Configuration object initialization.
 
@@ -128,6 +128,11 @@ class BaseConfig(object):
         """
         return '{0}.{1}{2}'.format(platform.node(), os.getpid(), postfix)
 
+    @staticmethod
+    def get_node_name():
+        host_name = platform.node()
+        return host_name.rsplit('.', 2)[0]
+
     def __dir__(self):
         return list(self.__config.keys())
 
@@ -145,7 +150,9 @@ class BaseConfig(object):
     def __validate_config(self, schema):
         validator = ConfigValidator(schema or {})
         if not validator.validate(self.__config):
-            error_list = ['{0}: {1}'.format(k, ', '.join(v))
-                          for k, v in validator.errors.items()]
+            error_list = [
+                '{0}: {1}'.format(k, ', '.join(v))
+                for k, v in validator.errors.items()
+            ]
             raise ValueError('. '.join(error_list))
         self.__config = validator.document

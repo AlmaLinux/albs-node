@@ -32,12 +32,16 @@ DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
 DEFAULT_JWT_TOKEN = 'test_jwt'
+DEFAULT_CACHE_UPDATE_INTERVAL = 600
+DEFAULT_EXCLUSIONS_URL = (
+    'https://git.almalinux.org/almalinux/build-node-exclusions/raw/branch/main'
+)
+DEFAULT_CACHE_SIZE = 1
 
 __all__ = ['BuildNodeConfig']
 
 
 class BuildNodeConfig(BaseConfig):
-
     """
     Build node configuration storage.
 
@@ -125,6 +129,10 @@ class BuildNodeConfig(BaseConfig):
             'immudb_public_key_file': None,
             'request_timeout': DEFAULT_REQUEST_TIMEOUT,
             'jwt_token': DEFAULT_JWT_TOKEN,
+            'cache_update_interval': DEFAULT_CACHE_UPDATE_INTERVAL,
+            'exclusions_url': DEFAULT_EXCLUSIONS_URL,
+            'build_node_name': self.get_node_name(),
+            'cache_size': DEFAULT_CACHE_SIZE,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -136,7 +144,11 @@ class BuildNodeConfig(BaseConfig):
             'working_dir': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
             'git_repos_cache_dir': {'type': 'string', 'required': True},
-            'git_extra_options': {'type': 'list', 'required': False, 'nullable': True},
+            'git_extra_options': {
+                'type': 'list',
+                'required': False,
+                'nullable': True,
+            },
             'native_support': {'type': 'boolean', 'default': True},
             'arm64_support': {'type': 'boolean', 'default': False},
             'arm32_support': {'type': 'boolean', 'default': False},
@@ -159,12 +171,20 @@ class BuildNodeConfig(BaseConfig):
             'immudb_public_key_file': {'type': 'string', 'nullable': True},
             'base_arch': {'type': 'string', 'nullable': False},
             'build_src': {'type': 'boolean', 'nullable': False},
-            'pulp_timeout': {'type': 'integer', 'min': DEFAULT_PULP_TIMEOUT,
-                             'required': True},
+            'pulp_timeout': {
+                'type': 'integer',
+                'min': DEFAULT_PULP_TIMEOUT,
+                'required': True,
+            },
             'request_timeout': {'type': 'integer', 'required': True},
+            'cache_update_interval': {'type': 'integer', 'required': True},
+            'exclusions_url': {'type': 'string', 'required': True},
+            'build_node_name': {'type': 'string', 'required': True},
+            'cache_size': {'type': 'integer', 'required': True},
         }
-        super(BuildNodeConfig, self).__init__(default_config, config_file,
-                                              schema, **cmd_args)
+        super(BuildNodeConfig, self).__init__(
+            default_config, config_file, schema, **cmd_args
+        )
 
     @property
     def codenotary_enabled(self) -> bool:

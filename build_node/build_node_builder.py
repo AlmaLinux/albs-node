@@ -41,12 +41,7 @@ class BuildNodeBuilder(threading.Thread):
     """Build thread."""
 
     def __init__(
-        self,
-        config,
-        thread_num,
-        terminated_event,
-        graceful_terminated_event,
-        task_queue,
+        self, config, thread_num, terminated_event, graceful_terminated_event
     ):
         """
         Build thread initialization.
@@ -62,9 +57,7 @@ class BuildNodeBuilder(threading.Thread):
         graceful_terminated_event : threading.Event
             Shows, if process got "kill -10" signal.
         """
-        super(BuildNodeBuilder, self).__init__(
-            name='Builder-{0}'.format(thread_num)
-        )
+        super(BuildNodeBuilder, self).__init__(name=f'Builder-{thread_num}')
         self.__config = config
         self.__working_dir = os.path.join(
             config.working_dir, 'builder-{0}'.format(thread_num)
@@ -151,12 +144,8 @@ class BuildNodeBuilder(threading.Thread):
                 )
                 capture_exception(e)
             finally:
-                only_logs = not (
-                    bool(
-                        filter_files(
-                            artifacts_dir, lambda f: f.endswith('.rpm')
-                        )
-                    )
+                only_logs = not bool(
+                    filter_files(artifacts_dir, lambda f: f.endswith('.rpm'))
                 )
                 if success is False:
                     only_logs = True
