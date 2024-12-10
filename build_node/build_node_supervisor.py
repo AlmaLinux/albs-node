@@ -99,11 +99,20 @@ class BuilderSupervisor(threading.Thread):
 
     def get_excluded_packages(self):
         if 'excluded_packages' not in self.__cached_config:
-            uri = f'{self.__config.exclusions_url}/{self.__config.build_node_name}'
+            uri = urllib.parse.urljoin(
+                self.config.exclusions_url,
+                self.config.build_node_name,
+            )
             if file_url_exists(uri):
-                response = requests.get(uri).text
-                self.__cached_config['excluded_packages'] = response.splitlines()
-
+                try:
+                    response = requests.get(uri)
+                    response.raise_for_status()
+                    self.__cached_config['excluded_packages'] = (
+                        response.text.splitlines()
+                    )
+                except Exception:
+                    logging.exception('Cannot get excluded packages')
+                    return []
         return self.__cached_config.get('excluded_packages', [])
 
     def run(self):
