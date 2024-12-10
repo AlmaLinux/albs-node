@@ -41,7 +41,12 @@ class BuildNodeBuilder(threading.Thread):
     """Build thread."""
 
     def __init__(
-        self, config, thread_num, terminated_event, graceful_terminated_event
+        self,
+        config,
+        thread_num,
+        terminated_event,
+        graceful_terminated_event,
+        task_queue,
     ):
         """
         Build thread initialization.
