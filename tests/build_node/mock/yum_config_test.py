@@ -1,12 +1,8 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Diego Marfil <dmarfil@cloudlinux.com>
-# created: 2018-10-09
-
 """Yum config module unit tests."""
 
 import unittest
 
-from build_node.mock.yum_config import *
+from albs_build_lib.builder.mock.yum_config import *
 
 __all__ = ['TestYumConfig']
 

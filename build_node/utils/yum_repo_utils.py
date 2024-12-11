@@ -1,9 +1,5 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-11-05
-
 """
-CloudLinux Build System utility functions for working with yum repositories.
+AlmaLinux Build System utility functions for working with yum repositories.
 """
 
 import os
@@ -11,17 +7,20 @@ import tempfile
 
 import createrepo_c
 import plumbum
-
-from build_node.errors import DataNotFoundError
-
-
-__all__ = ['create_repo', 'get_repo_modules_yaml_path']
+from albs_common_lib.errors import DataNotFoundError
 
 
-def create_repo(repo_path, checksum_type=None, group_file=None, update=True,
-                simple_md_filenames=True, no_database=False,
-                compatibility=True, modules_yaml_content=None,
-                keep_all_metadata=False):
+def create_repo(
+    repo_path,
+    checksum_type=None,
+    group_file=None,
+    update=True,
+    simple_md_filenames=True,
+    no_database=False,
+    compatibility=True,
+    modules_yaml_content=None,
+    keep_all_metadata=False,
+):
     """
     Creates (or updates the existent) a yum repository using a createrepo_c
     tool.
@@ -74,9 +73,15 @@ def create_repo(repo_path, checksum_type=None, group_file=None, update=True,
         with tempfile.NamedTemporaryFile(prefix='castor_') as fd:
             fd.write(modules_yaml_content.encode('utf-8'))
             fd.flush()
-            modifyrepo_c('--simple-md-filenames', '--mdtype', 'modules',
-                         fd.name, '--new-name', 'modules.yaml',
-                         os.path.join(repo_path, 'repodata'))
+            modifyrepo_c(
+                '--simple-md-filenames',
+                '--mdtype',
+                'modules',
+                fd.name,
+                '--new-name',
+                'modules.yaml',
+                os.path.join(repo_path, 'repodata'),
+            )
 
 
 def get_repo_modules_yaml_path(repo_path):

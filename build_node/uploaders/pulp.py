@@ -1,23 +1,22 @@
+import csv
 import logging
 import os
-import csv
+import shutil
 import tempfile
 import time
-import shutil
-from concurrent.futures import as_completed, ThreadPoolExecutor
-from typing import List, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Optional, Tuple
 
+from albs_build_lib.builder.models import Artifact
+from albs_common_lib.utils.file_utils import hash_file
 from fsplit.filesplit import Filesplit
-from pulpcore.client.pulpcore.configuration import Configuration
-from pulpcore.client.pulpcore.api_client import ApiClient
+from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
-from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
+from pulpcore.client.pulpcore.api_client import ApiClient
+from pulpcore.client.pulpcore.configuration import Configuration
 
 from build_node.uploaders.base import BaseUploader, UploadError
-from build_node.utils.file_utils import hash_file
-from build_node.models import Artifact
-
 
 __all__ = ['PulpBaseUploader', 'PulpRpmUploader']
 
@@ -34,9 +33,15 @@ class PulpBaseUploader(BaseUploader):
     Handles uploads to Pulp server.
     """
 
-    def __init__(self, host: str, username: str, password: str,
-                 chunk_size: int, max_workers: int,
-                 requests_timeout: int = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        chunk_size: int,
+        max_workers: int,
+        requests_timeout: int = DEFAULT_TIMEOUT,
+    ):
         """
         Initiate uploader.
 
@@ -64,8 +69,9 @@ class PulpBaseUploader(BaseUploader):
         self._logger = logging.getLogger(__file__)
 
     @staticmethod
-    def _prepare_api_client(host: str, username: str, password: str) \
-            -> ApiClient:
+    def _prepare_api_client(
+        host: str, username: str, password: str
+    ) -> ApiClient:
         """
 
         Parameters
@@ -80,7 +86,8 @@ class PulpBaseUploader(BaseUploader):
 
         """
         api_configuration = Configuration(
-            host=host, username=username, password=password)
+            host=host, username=username, password=password
+        )
         return ApiClient(configuration=api_configuration)
 
     def _wait_for_task_completion(self, task_href: str) -> dict:
@@ -100,10 +107,12 @@ class PulpBaseUploader(BaseUploader):
         while result.state not in ('failed', 'completed'):
             time.sleep(5)
             result = self._tasks_client.read(
-                task_href, _request_timeout=self._requests_timeout)
+                task_href, _request_timeout=self._requests_timeout
+            )
         if result.state == 'failed':
-            raise TaskFailedError(f'task {task_href} has failed, '
-                                  f'details: {result}')
+            raise TaskFailedError(
+                f'task {task_href} has failed, ' f'details: {result}'
+            )
         return result
 
     def _create_upload(self, file_path: str) -> Tuple[str, int]:
@@ -122,7 +131,8 @@ class PulpBaseUploader(BaseUploader):
         """
         file_size = os.path.getsize(file_path)
         response = self._uploads_client.create(
-            {'size': file_size}, _request_timeout=self._requests_timeout)
+            {'size': file_size}, _request_timeout=self._requests_timeout
+        )
         return response.pulp_href, file_size
 
     def _commit_upload(self, file_path: str, reference: str) -> str:
@@ -145,8 +155,10 @@ class PulpBaseUploader(BaseUploader):
         """
         file_sha256 = hash_file(file_path, hash_type='sha256')
         response = self._uploads_client.commit(
-            reference, {'sha256': file_sha256},
-            _request_timeout=self._requests_timeout)
+            reference,
+            {'sha256': file_sha256},
+            _request_timeout=self._requests_timeout,
+        )
         try:
             task_result = self._wait_for_task_completion(response.task)
             return task_result.created_resources[0]
@@ -162,18 +174,22 @@ class PulpBaseUploader(BaseUploader):
             lower_bytes_limit = 0
             total_size = os.path.getsize(file_path)
             self._file_splitter.split(
-                file_path, self._chunk_size, output_dir=temp_dir)
+                file_path, self._chunk_size, output_dir=temp_dir
+            )
             manifest_path = os.path.join(temp_dir, 'fs_manifest.csv')
             with open(manifest_path, 'r') as f:
                 for meta in csv.DictReader(f):
                     split_file_path = os.path.join(temp_dir, meta['filename'])
                     upper_bytes_limit = (
-                            lower_bytes_limit + int(meta['filesize']) - 1)
+                        lower_bytes_limit + int(meta['filesize']) - 1
+                    )
                     self._uploads_client.update(
                         f'bytes {lower_bytes_limit}-{upper_bytes_limit}/'
                         f'{total_size}',
-                        reference, split_file_path,
-                        _request_timeout=self._requests_timeout)
+                        reference,
+                        split_file_path,
+                        _request_timeout=self._requests_timeout,
+                    )
                     lower_bytes_limit += int(meta['filesize'])
         finally:
             if temp_dir and os.path.exists(temp_dir):
@@ -182,22 +198,25 @@ class PulpBaseUploader(BaseUploader):
     def _send_file(self, file_path: str):
         reference, file_size = self._create_upload(file_path)
         if file_size > self._chunk_size:
-            self._logger.debug('File size exceeded %d, sending file in parts',
-                               self._chunk_size)
+            self._logger.debug(
+                'File size exceeded %d, sending file in parts',
+                self._chunk_size,
+            )
             self._put_large_file(file_path, reference)
         else:
             self._uploads_client.update(
                 f'bytes 0-{file_size - 1}/{file_size}',
                 reference,
                 file_path,
-                _request_timeout=self._requests_timeout
+                _request_timeout=self._requests_timeout,
             )
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
     def check_if_artifact_exists(self, sha256: str) -> Optional[str]:
         response = self._artifacts_client.list(
-            sha256=sha256, _request_timeout=self._requests_timeout)
+            sha256=sha256, _request_timeout=self._requests_timeout
+        )
         if response.results:
             return response.results[0].pulp_href
 
@@ -222,8 +241,11 @@ class PulpBaseUploader(BaseUploader):
                 artifacts.append(self.upload_single_file(artifact))
             except Exception as e:
                 self._logger.exception(
-                    'Cannot upload %s, error: %s', str(artifact), str(e),
-                    exc_info=e)
+                    'Cannot upload %s, error: %s',
+                    str(artifact),
+                    str(e),
+                    exc_info=e,
+                )
                 errored_uploads.append(artifact)
         # TODO: Decide what to do with successfully uploaded artifacts
         #  in case of errors during upload.
@@ -254,14 +276,15 @@ class PulpBaseUploader(BaseUploader):
             href=reference,
             sha256=file_sha256,
             path=filename,
-            type='rpm' if filename.endswith('.rpm') else 'build_log'
+            type='rpm' if filename.endswith('.rpm') else 'build_log',
         )
 
 
 class PulpRpmUploader(PulpBaseUploader):
 
-    def get_artifacts_list(self, artifacts_dir: str,
-                           only_logs: bool = False) -> List[str]:
+    def get_artifacts_list(
+        self, artifacts_dir: str, only_logs: bool = False
+    ) -> List[str]:
         """
 
         Returns the list of the files in artifacts directory
@@ -290,8 +313,9 @@ class PulpRpmUploader(PulpBaseUploader):
                 artifacts.append(file_)
         return artifacts
 
-    def upload(self, artifacts_dir: str,
-               only_logs: bool = False) -> List[Artifact]:
+    def upload(
+        self, artifacts_dir: str, only_logs: bool = False
+    ) -> List[Artifact]:
         """
 
         Parameters
@@ -314,7 +338,8 @@ class PulpRpmUploader(PulpBaseUploader):
             futures = {
                 executor.submit(self.upload_single_file, artifact): artifact
                 for artifact in self.get_artifacts_list(
-                    artifacts_dir, only_logs=only_logs)
+                    artifacts_dir, only_logs=only_logs
+                )
             }
             for future in as_completed(futures):
                 artifact = futures[future]
@@ -322,7 +347,8 @@ class PulpRpmUploader(PulpBaseUploader):
                     success_uploads.append(future.result())
                 except Exception as e:
                     self._logger.exception(
-                        'Cannot upload %s', artifact, exc_info=e)
+                        'Cannot upload %s', artifact, exc_info=e
+                    )
                     errored_uploads.append(artifact)
         self._logger.info('Upload has been finished')
         # TODO: Decide what to do with successfully uploaded artifacts

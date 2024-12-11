@@ -1,12 +1,8 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Leandr Khalullov <lkhaliullov@cloudlinux.com>
-# created: 2019-10-07
-
 """Mock config module unit tests."""
 
 import unittest
 
-from build_node.mock.mock_config import MockConfig
+from albs_build_lib.builder.mock.mock_config import MockConfig
 
 __all__ = ['TestModuleConfig']
 

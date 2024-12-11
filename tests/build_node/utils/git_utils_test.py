@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-06-09
-
 """build_node.utils.git_utils module unit tests."""
 
 import os

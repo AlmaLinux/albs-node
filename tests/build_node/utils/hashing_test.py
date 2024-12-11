@@ -1,4 +1,4 @@
-from build_node.utils import hashing
+from albs_common_lib.utils import hashing
 
 
 def test_hashing():

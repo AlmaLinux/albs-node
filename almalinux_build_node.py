@@ -10,16 +10,16 @@ import time
 from threading import Event
 
 import sentry_sdk
+from albs_build_lib.builder.mock.mock_environment import MockError
+from albs_common_lib.errors import BuildError, BuildExcluded
+from albs_common_lib.utils.file_utils import chown_recursive, rm_sudo
+from albs_common_lib.utils.spec_parser import SpecParseError
 
 import build_node.build_node_globals as node_globals
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
-from build_node.build_node_errors import BuildError, BuildExcluded
 from build_node.build_node_supervisor import BuilderSupervisor
-from build_node.mock.mock_environment import MockError
 from build_node.utils.config import locate_config_file
-from build_node.utils.file_utils import chown_recursive, rm_sudo
-from build_node.utils.spec_parser import SpecParseError
 
 running = True
 
@@ -34,7 +34,7 @@ def init_args_parser():
     """
     parser = argparse.ArgumentParser(
         prog='castor_build_node',
-        description='CloudLinux Build System build node',
+        description='AlmaLinux Build System build node',
     )
     parser.add_argument('-c', '--config', help='configuration file path')
     parser.add_argument('-i', '--id', help='build node unique identifier')

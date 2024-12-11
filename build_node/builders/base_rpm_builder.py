@@ -1,9 +1,5 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-10-24
-
 """
-Base class for CloudLinux Build System RPM package builders.
+Base class for AlmaLinux Build System RPM package builders.
 """
 
 import gzip
@@ -12,39 +8,51 @@ import os
 import re
 import shutil
 import textwrap
-import traceback
 import time
+import traceback
 import urllib.parse
 from distutils.dir_util import copy_tree
 from typing import Optional, Tuple
 
-import validators
 import rpm
+import validators
+from albs_build_lib.builder.base_builder import BaseBuilder, measure_stage
+from albs_build_lib.builder.mock.error_detector import build_log_excluded_arch
+from albs_build_lib.builder.mock.mock_config import (
+    MockBindMountPluginConfig,
+    MockChrootFile,
+    MockConfig,
+    MockPluginChrootScanConfig,
+    MockPluginConfig,
+)
+from albs_build_lib.builder.mock.mock_environment import MockError
+from albs_build_lib.builder.mock.yum_config import (
+    YumConfig,
+    YumRepositoryConfig,
+)
+from albs_common_lib.errors import (
+    BuildConfigurationError,
+    BuildError,
+    BuildExcluded,
+)
+from albs_common_lib.utils.file_utils import download_file
+from albs_common_lib.utils.git_utils import (
+    MirroredGitRepo,
+    WrappedGitRepo,
+    git_get_commit_id,
+)
+from albs_common_lib.utils.index_utils import extract_metadata
+from albs_common_lib.utils.ported import to_unicode
+from albs_common_lib.utils.rpm_utils import unpack_src_rpm
+from albs_common_lib.utils.spec_parser import SpecParser, SpecSource
 from pyrpm.spec import Spec, replace_macros
 
-from build_node.builders.base_builder import measure_stage, BaseBuilder
-from build_node.build_node_errors import (
-    BuildError, BuildConfigurationError, BuildExcluded
-)
-from build_node.mock.error_detector import build_log_excluded_arch
-from build_node.mock.yum_config import YumConfig, YumRepositoryConfig
-from build_node.mock.mock_config import (
-    MockConfig, MockChrootFile, MockBindMountPluginConfig,
-    MockPluginChrootScanConfig, MockPluginConfig
-)
-from build_node.mock.mock_environment import MockError
-from build_node.utils.git_utils import WrappedGitRepo
-from build_node.utils.rpm_utils import unpack_src_rpm
-from build_node.utils.file_utils import download_file
 from build_node.utils.git_sources_utils import (
     AlmaSourceDownloader,
     CentpkgDowloader,
 )
-from build_node.utils.index_utils import extract_metadata
-from build_node.utils.spec_parser import SpecParser, SpecSource
-from build_node.ported import to_unicode
 
-__all__ = ['BaseRPMBuilder']
+from .. import build_node_globals as node_globals
 
 # 'r' modifier and the number of slashes is intentional, modify very carefully
 # or don't touch this at all
@@ -65,8 +73,15 @@ MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
 
 class BaseRPMBuilder(BaseBuilder):
 
-    def __init__(self, config, logger, task,
-                 task_dir, artifacts_dir, immudb_wrapper):
+    def __init__(
+        self,
+        config,
+        logger,
+        task,
+        task_dir,
+        artifacts_dir,
+        immudb_wrapper,
+    ):
         """
         RPM builder initialization.
 
@@ -76,7 +91,7 @@ class BaseRPMBuilder(BaseBuilder):
             Build node configuration object.
         logger : logging.Logger
             Current build thread logger.
-        task : dict
+        task : Task
             Build task.
         task_dir : str
             Build task working directory.
@@ -85,15 +100,80 @@ class BaseRPMBuilder(BaseBuilder):
         immudb_wrapper: ImmudbWrapper
             ImmudbWrapper instance
         """
-        super(BaseRPMBuilder, self).__init__(config, logger, task, task_dir,
-                                             artifacts_dir)
+        super().__init__(
+            config,
+            logger,
+            task,
+            task_dir,
+            artifacts_dir,
+        )
         self.immudb_wrapper = immudb_wrapper
         self.codenotary_enabled = config.codenotary_enabled
 
-    def prepare_autospec_sources(
+    @measure_stage("git_checkout")
+    def checkout_git_sources(
         self,
-        git_sources_dir: str,
-        downloaded_sources_dir: str = None
+        git_sources_dir,
+        ref,
+        use_repo_cache: bool = True,
+    ):
+        """
+        Checkouts a project sources from the specified git repository.
+
+        Parameters
+        ----------
+        git_sources_dir : str
+            Target directory path.
+        ref : TaskRef
+            Git (gerrit) reference.
+        use_repo_cache : bool
+            Switch on or off the repo caching ability
+
+        Returns
+        -------
+        cla.utils.alt_git_repo.WrappedGitRepo
+            Git repository wrapper.
+        """
+        self.logger.info(
+            'checking out {0} from {1}'.format(ref.git_ref, ref.url)
+        )
+        # FIXME: Understand why sometimes we hold repository lock more
+        #  than 60 seconds
+        if use_repo_cache:
+            with MirroredGitRepo(
+                ref.url,
+                self.config.git_repos_cache_dir,
+                self.config.git_cache_locks_dir,
+                timeout=600,
+                git_command_extras=self.config.git_extra_options,
+            ) as cached_repo:
+                repo = cached_repo.clone_to(git_sources_dir)
+        else:
+            repo = WrappedGitRepo(git_sources_dir)
+            repo.clone_from(ref.url, git_sources_dir)
+        repo.checkout(ref.git_ref)
+        self.__log_commit_id(git_sources_dir)
+        return repo
+
+    def __log_commit_id(self, git_sources_dir):
+        """
+        Prints a current (HEAD) git repository commit id to a build log.
+
+        Parameters
+        ----------
+        git_sources_dir : str
+            Git repository path.
+        """
+        try:
+            commit_id = git_get_commit_id(git_sources_dir)
+            self.task.ref.git_commit_hash = commit_id
+            self.logger.info('git commit id: {0}'.format(commit_id))
+        except Exception as e:
+            msg = 'can not get git commit id: {0}. Traceback:\n{1}'
+            self.logger.error(msg.format(str(e), traceback.format_exc()))
+
+    def prepare_autospec_sources(
+        self, git_sources_dir: str, downloaded_sources_dir: str = None
     ) -> Tuple[str, Optional[str]]:
         source_srpm_dir = git_sources_dir
         spec_file = self.locate_spec_file(git_sources_dir)
@@ -121,7 +201,7 @@ class BaseRPMBuilder(BaseBuilder):
                 git_repo,
                 git_sources_dir,
                 source_srpm_dir,
-                src_suffix_dir=downloaded_sources_dir
+                src_suffix_dir=downloaded_sources_dir,
             )
         finally:
             os.chdir(cwd)
@@ -161,61 +241,75 @@ class BaseRPMBuilder(BaseBuilder):
                 # TODO: Temporarily disable git caching because it interferes with
                 #  centpkg work
                 git_repo = self.checkout_git_sources(
-                    git_sources_dir, self.task.ref, use_repo_cache=False)
+                    git_sources_dir, self.task.ref, use_repo_cache=False
+                )
                 sources_file = os.path.join(git_sources_dir, 'sources')
                 sources_dir = os.path.join(git_sources_dir, 'SOURCES')
                 if self.task.is_alma_source():
                     if self.codenotary_enabled:
                         self.cas_source_authenticate(git_sources_dir)
                     self.logger.info('Trying to download AlmaLinux sources')
-                    alma_sources_downloaded = self.prepare_alma_sources(git_sources_dir)
-                    if not alma_sources_downloaded and os.path.exists(sources_file):
-                        self.logger.info('AlmaLinux sources were not downloaded, calling centpkg')
-                        centos_sources_downloaded = self.prepare_centos_sources(git_sources_dir)
-                    if not alma_sources_downloaded and not centos_sources_downloaded:
+                    alma_sources_downloaded = self.prepare_alma_sources(
+                        git_sources_dir
+                    )
+                    if not alma_sources_downloaded and os.path.exists(
+                        sources_file
+                    ):
+                        self.logger.info(
+                            'AlmaLinux sources were not downloaded, calling centpkg'
+                        )
+                        centos_sources_downloaded = (
+                            self.prepare_centos_sources(git_sources_dir)
+                        )
+                    if (
+                        not alma_sources_downloaded
+                        and not centos_sources_downloaded
+                    ):
                         self.logger.warning(
                             'Both AlmaLinux and CentOS downloaders failed, '
                             'assuming all sources are already in place'
                         )
                     if os.path.exists(sources_dir):
                         src_suffix_dir = 'SOURCES'
-                self.execute_pre_build_hook(git_sources_dir)
                 autospec_conditions = [
                     self.task.is_rpmautospec_required(),
-                    alma_sources_downloaded or centos_sources_downloaded
+                    alma_sources_downloaded or centos_sources_downloaded,
                 ]
                 if all(autospec_conditions):
                     source_srpm_dir, spec_file = self.prepare_autospec_sources(
-                        git_sources_dir,
-                        downloaded_sources_dir=src_suffix_dir
+                        git_sources_dir, downloaded_sources_dir=src_suffix_dir
                     )
                 else:
                     source_srpm_dir, spec_file = self.prepare_usual_sources(
                         git_repo,
                         git_sources_dir,
                         sources_dir,
-                        downloaded_sources_dir=src_suffix_dir
+                        downloaded_sources_dir=src_suffix_dir,
                     )
             else:
                 source_srpm_dir = self.unpack_sources()
                 spec_file = self.locate_spec_file(source_srpm_dir)
             if self.task.platform.data.get('allow_sources_download'):
                 mock_defines = self.task.platform.data.get('definitions')
-                self.download_remote_sources(source_srpm_dir, spec_file,
-                                             mock_defines)
+                self.download_remote_sources(
+                    source_srpm_dir, spec_file, mock_defines
+                )
             self.build_packages(source_srpm_dir, spec_file)
         except BuildExcluded as e:
             raise e
         except Exception as e:
             self.logger.warning(
                 'can not process: %s\nTraceback:\n%s',
-                str(e), traceback.format_exc()
+                str(e),
+                traceback.format_exc(),
             )
             raise BuildError(str(e))
 
     @measure_stage("cas_source_authenticate")
     def cas_source_authenticate(self, git_sources_dir: str):
-        auth_result = self.immudb_wrapper.authenticate_git_repo(git_sources_dir)
+        auth_result = self.immudb_wrapper.authenticate_git_repo(
+            git_sources_dir
+        )
         self.task.is_cas_authenticated = auth_result.get('verified', False)
         self.task.alma_commit_cas_hash = (
             auth_result.get('value', {})
@@ -225,8 +319,14 @@ class BaseRPMBuilder(BaseBuilder):
         )
 
     @measure_stage("build_srpm")
-    def build_srpm(self, mock_config, sources_dir, resultdir, spec_file=None,
-                   definitions=None):
+    def build_srpm(
+        self,
+        mock_config,
+        sources_dir,
+        resultdir,
+        spec_file=None,
+        definitions=None,
+    ):
         """
         Build a src-RPM package from the specified sources.
 
@@ -252,9 +352,13 @@ class BaseRPMBuilder(BaseBuilder):
         if not spec_file:
             spec_file = self.locate_spec_file(sources_dir)
         with self.mock_supervisor.environment(mock_config) as mock_env:
-            return mock_env.buildsrpm(spec_file, sources_dir, resultdir,
-                                      definitions=definitions,
-                                      timeout=self.build_timeout)
+            return mock_env.buildsrpm(
+                spec_file,
+                sources_dir,
+                resultdir,
+                definitions=definitions,
+                timeout=self.build_timeout,
+            )
 
     @measure_stage('build_binaries')
     def build_binaries(self, srpm_path, definitions=None):
@@ -304,14 +408,20 @@ class BaseRPMBuilder(BaseBuilder):
         self.logger.info('starting src-RPM build')
         srpm_result_dir = os.path.join(self.task_dir, 'srpm_result')
         os.makedirs(srpm_result_dir)
-        srpm_mock_config = self.generate_mock_config(self.config, self.task,
-                                                     srpm_build=True)
+        srpm_mock_config = self.generate_mock_config(
+            self.config,
+            self.task,
+            srpm_build=True,
+        )
         srpm_build_result = None
         try:
-            srpm_build_result = self.build_srpm(srpm_mock_config, src_dir,
-                                                srpm_result_dir,
-                                                spec_file=spec_file,
-                                                definitions=mock_defines)
+            srpm_build_result = self.build_srpm(
+                srpm_mock_config,
+                src_dir,
+                srpm_result_dir,
+                spec_file=spec_file,
+                definitions=mock_defines,
+            )
         except MockError as e:
             excluded, reason = self.is_srpm_build_excluded(e)
             if excluded:
@@ -320,8 +430,9 @@ class BaseRPMBuilder(BaseBuilder):
             raise BuildError('src-RPM build failed: {0}'.format(str(e)))
         finally:
             if srpm_build_result:
-                self.save_build_artifacts(srpm_build_result,
-                                          srpm_artifacts=True)
+                self.save_build_artifacts(
+                    srpm_build_result, srpm_artifacts=True
+                )
         srpm_path = srpm_build_result.srpm
         self.logger.info('src-RPM %s was successfully built', srpm_path)
         if self.task.arch == 'src':
@@ -367,8 +478,13 @@ class BaseRPMBuilder(BaseBuilder):
         downloader = CentpkgDowloader(git_sources_dir)
         return downloader.download_all()
 
-    def prepare_koji_sources(self, git_repo, git_sources_dir, output_dir,
-                             src_suffix_dir=None):
+    def prepare_koji_sources(
+        self,
+        git_repo,
+        git_sources_dir,
+        output_dir,
+        src_suffix_dir=None,
+    ):
         """
         Generates a koji compatible sources (spec file, tarball and patches)
         from a project sources.
@@ -402,8 +518,12 @@ class BaseRPMBuilder(BaseBuilder):
         except Exception:
             try:
                 parsed_spec = Spec.from_file(spec_path)
-                sources = [replace_macros(s, parsed_spec) for s in parsed_spec.sources]
-                patches = [replace_macros(p, parsed_spec) for p in parsed_spec.patches]
+                sources = [
+                    replace_macros(s, parsed_spec) for s in parsed_spec.sources
+                ]
+                patches = [
+                    replace_macros(p, parsed_spec) for p in parsed_spec.patches
+                ]
             except Exception:
                 self.logger.exception(
                     "Can't parse spec file, expecting all sources"
@@ -426,21 +546,24 @@ class BaseRPMBuilder(BaseBuilder):
                 if not src_suffix_dir:
                     source_path = os.path.join(git_sources_dir, file_name)
                 else:
-                    source_path = os.path.join(git_sources_dir, src_suffix_dir,
-                                               file_name)
+                    source_path = os.path.join(
+                        git_sources_dir, src_suffix_dir, file_name
+                    )
                 self.logger.debug(
                     'Original path: %s, file exists: %s',
                     source_path,
-                    os.path.exists(source_path)
+                    os.path.exists(source_path),
                 )
                 self.logger.debug(
                     'Additional path: %s, file exists: %s',
                     add_source_path,
-                    os.path.exists(add_source_path)
+                    os.path.exists(add_source_path),
                 )
                 if os.path.exists(source_path):
                     shutil.copy(source_path, output_dir)
-                elif not os.path.exists(source_path) and os.path.exists(add_source_path):
+                elif not os.path.exists(source_path) and os.path.exists(
+                    add_source_path
+                ):
                     shutil.copy(add_source_path, output_dir)
                 elif parsed_url.scheme in ('http', 'https', 'ftp'):
                     download_file(source.name, output_dir)
@@ -449,12 +572,14 @@ class BaseRPMBuilder(BaseBuilder):
             if tarball_path is not None and not os.path.exists(tarball_path):
                 tarball_prefix = '{0}-{1}/'.format(
                     parsed_spec.source_package.name,
-                    parsed_spec.source_package.version
+                    parsed_spec.source_package.version,
                 )
                 git_ref = self.task.ref.git_ref
                 git_repo.archive(
-                    git_ref, tarball_path, archive_format='tar.bz2',
-                    prefix=tarball_prefix
+                    git_ref,
+                    tarball_path,
+                    archive_format='tar.bz2',
+                    prefix=tarball_prefix,
                 )
         except Exception:
             self.logger.exception(
@@ -521,12 +646,15 @@ class BaseRPMBuilder(BaseBuilder):
                     name=repo.name,
                     priority=str(repo.priority),
                     baseurl=repo.url,
-                    **repo_kwargs
+                    **repo_kwargs,
                 ),
             )
         yum_config_kwargs = task.platform.data.get('yum', {})
-        yum_config = YumConfig(rpmverbosity='info', repositories=yum_repos,
-                               **yum_config_kwargs)
+        yum_config = YumConfig(
+            rpmverbosity='info',
+            repositories=yum_repos,
+            **yum_config_kwargs,
+        )
         mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
         target_arch = task.arch
         if target_arch == 'src':
@@ -546,9 +674,12 @@ class BaseRPMBuilder(BaseBuilder):
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'),
-            rpmbuild_networking=True, use_host_resolv=True,
-            yum_config=yum_config, target_arch=target_arch,
-            basedir=config.mock_basedir, **mock_config_kwargs
+            rpmbuild_networking=True,
+            use_host_resolv=True,
+            yum_config=yum_config,
+            target_arch=target_arch,
+            basedir=config.mock_basedir,
+            **mock_config_kwargs,
         )
         if task.is_secure_boot:
             mock_config.set_config_opts({'isolation': 'simple'})
@@ -556,7 +687,8 @@ class BaseRPMBuilder(BaseBuilder):
                 'nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin'
             )
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/opt/pesign', '/usr/local/bin')])
+                True, [('/opt/pesign', '/usr/local/bin')]
+            )
             mock_config.add_plugin(bind_plugin)
             mock_config.add_file(
                 MockChrootFile(MODSIGN_MACROS_PATH, MODSIGN_CONTENT)
@@ -566,14 +698,14 @@ class BaseRPMBuilder(BaseBuilder):
                 'rpmautospec',
                 True,
                 requires=['rpmautospec'],
-                cmd_base=['/usr/bin/rpmautospec', 'process-distgit']
+                cmd_base=['/usr/bin/rpmautospec', 'process-distgit'],
             )
             mock_config.add_plugin(rpmautospec_plugin)
         if config.npm_proxy:
-            BaseRPMBuilder.configure_mock_npm_proxy(
-                mock_config, config.npm_proxy)
+            BaseRPMBuilder.configure_npm_proxy(mock_config, config.npm_proxy)
         BaseRPMBuilder.configure_mock_chroot_scan(
-            mock_config, task.platform.data.get('custom_logs', None))
+            mock_config, task.platform.data.get('custom_logs', None)
+        )
         return mock_config
 
     @staticmethod
@@ -595,12 +727,15 @@ class BaseRPMBuilder(BaseBuilder):
         """
         if custom_logs:
             chroot_scan = MockPluginChrootScanConfig(
-                name='chroot_scan', enable=True, only_failed=False,
-                regexes=custom_logs)
+                name='chroot_scan',
+                enable=True,
+                only_failed=False,
+                regexes=custom_logs,
+            )
             mock_config.add_plugin(chroot_scan)
 
     @staticmethod
-    def configure_mock_npm_proxy(mock_config, npm_proxy):
+    def configure_npm_proxy(mock_config, npm_proxy):
         """
         Adds an NPM proxy configuration to the mock chroot configuration.
 
@@ -617,21 +752,30 @@ class BaseRPMBuilder(BaseBuilder):
             If NPM proxy URL is not valid.
         """
         if not validators.url(npm_proxy):
-            raise BuildConfigurationError('NPM proxy URL {0!r} is invalid'.
-                                          format(npm_proxy))
-        npmrc_content = textwrap.dedent("""
+            raise BuildConfigurationError(
+                'NPM proxy URL {0!r} is invalid'.format(npm_proxy)
+            )
+        npmrc_content = textwrap.dedent(
+            """
             https-proxy={0}
             proxy={0}
             strict-ssl=false
-        """.format(npm_proxy))
+        """.format(
+                npm_proxy
+            )
+        )
         mock_config.add_file(MockChrootFile('/usr/etc/npmrc', npmrc_content))
         # TODO: verify that yarn correctly reads settings from npmrc and
         #       delete that block then
-        yarnrc_content = textwrap.dedent("""
+        yarnrc_content = textwrap.dedent(
+            """
             https-proxy "{0}"
             proxy "{0}"
             strict-ssl false
-        """.format(npm_proxy))
+        """.format(
+                npm_proxy
+            )
+        )
         mock_config.add_file(MockChrootFile('/usr/etc/yarnrc', yarnrc_content))
 
     @staticmethod
@@ -676,8 +820,9 @@ class BaseRPMBuilder(BaseBuilder):
         task_id = self.task.id
         suffix = '.srpm' if srpm_artifacts else ''
         ts = int(time.time())
-        mock_cfg_file = os.path.join(self.artifacts_dir,
-                                     f'mock{suffix}.{task_id}.{ts}.cfg')
+        mock_cfg_file = os.path.join(
+            self.artifacts_dir, f'mock{suffix}.{task_id}.{ts}.cfg'
+        )
         with open(mock_cfg_file, 'w') as mock_cfg_fd:
             mock_cfg_fd.write(to_unicode(mock_result.mock_config))
         if mock_result.srpm and not self.task.built_srpm_url:
@@ -698,14 +843,19 @@ class BaseRPMBuilder(BaseBuilder):
             re_rslt = re.search(r'^(.*?)\.log$', file_name)
             if not re_rslt:
                 continue
-            dst_file_name = f'mock_{re_rslt.group(1)}{suffix}.{task_id}.{ts}.log'
+            dst_file_name = (
+                f'mock_{re_rslt.group(1)}{suffix}.{task_id}.{ts}.log'
+            )
             dst_file_path = os.path.join(self.artifacts_dir, dst_file_name)
-            with open(mock_log_path, 'rb') as src_fd, open(dst_file_path, 'wb') as dst_fd:
+            with open(mock_log_path, 'rb') as src_fd, open(
+                dst_file_path, 'wb'
+            ) as dst_fd:
                 dst_fd.write(gzip.compress(src_fd.read()))
         if mock_result.stderr:
             stderr_file_name = f'mock_stderr{suffix}.{task_id}.{ts}.log'
-            stderr_file_path = os.path.join(self.artifacts_dir,
-                                            stderr_file_name)
+            stderr_file_path = os.path.join(
+                self.artifacts_dir, stderr_file_name
+            )
             with open(stderr_file_path, 'wb') as dst:
                 dst.write(gzip.compress(str(mock_result.stderr).encode()))
 
@@ -736,17 +886,21 @@ class BaseRPMBuilder(BaseBuilder):
         exclude_arch = get_expanded_value('excludearch')
         if (
             arch in exclude_arch
-            or arch == 'x86_64_v2' and 'x86_64' in exclude_arch
+            or arch == 'x86_64_v2'
+            and 'x86_64' in exclude_arch
         ):
             return True, f'the "{arch}" architecture is listed in ExcludeArch'
         if exclusive_arch:
             bit32_arches = {'i386', 'i486', 'i586', 'i686'}
             if arch == 'x86_64_v2' and 'x86_64' in exclusive_arch:
                 exclusive_arch.append(arch)
-            if (arch not in bit32_arches and arch not in exclusive_arch) or \
-                    (arch in bit32_arches and
-                     not bit32_arches & set(exclusive_arch)):
-                return True, f'the "{arch}" architecture is not listed in ExclusiveArch'
+            if (arch not in bit32_arches and arch not in exclusive_arch) or (
+                arch in bit32_arches and not bit32_arches & set(exclusive_arch)
+            ):
+                return (
+                    True,
+                    f'the "{arch}" architecture is not listed in ExclusiveArch',
+                )
         return False, None
 
     @staticmethod
@@ -777,3 +931,25 @@ class BaseRPMBuilder(BaseBuilder):
                     if error:
                         return True, error[1]
         return False, None
+
+    @property
+    def build_timeout(self):
+        """
+        Build timeout in seconds.
+
+        Returns
+        -------
+        int or None
+        """
+        return self.task.platform.data.get('timeout')
+
+    @property
+    def mock_supervisor(self):
+        """
+        Mock chroot environments supervisor.
+
+        Returns
+        -------
+        castor.mock.supervisor.MockSupervisor
+        """
+        return node_globals.MOCK_SUPERVISOR

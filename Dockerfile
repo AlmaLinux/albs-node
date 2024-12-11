@@ -7,7 +7,7 @@ RUN <<EOT
   dnf upgrade -y
   dnf install -y \
     gcc gcc-c++ make cmake git mock mock-rpmautospec keyrings-filesystem sudo \
-    libicu libicu-devel kernel-rpm-macros createrepo_c cpio \
+    libicu libicu-devel kernel-rpm-macros createrepo_c cpio e2fsprogs \
     python3-devel python3-lxml python3-createrepo_c python3-libmodulemd \
     centpkg
   dnf clean all

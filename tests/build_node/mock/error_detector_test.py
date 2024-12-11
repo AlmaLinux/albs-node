@@ -1,13 +1,9 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-09-21
-
 """Mock errors detection module unit tests."""
 
 import unittest
 
-from build_node.mock.error_detector import *
-from build_node.mock.error_detector import build_log_changelog_order, \
+from albs_build_lib.builder.mock.error_detector import *
+from albs_build_lib.builder.mock.error_detector import build_log_changelog_order, \
     build_log_excluded_arch, build_log_hangup, build_log_spec_section_failed, \
     build_log_timeout, build_log_missing_file, build_log_unpackaged, \
     root_log_repository, root_log_no_space, root_log_unmet_dependency

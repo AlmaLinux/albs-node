@@ -5,7 +5,7 @@ import urllib.parse
 
 from plumbum import local
 
-from build_node.utils.file_utils import download_file
+from albs_common_lib.utils.file_utils import download_file
 
 
 class BaseSourceDownloader:
