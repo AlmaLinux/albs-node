@@ -3,5 +3,5 @@
 # created: 2018-01-23
 
 """
-CloudLinux Build System utility functions unit tests.
+AlmaLinux Build System utility functions unit tests.
 """
