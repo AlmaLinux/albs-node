@@ -3,7 +3,7 @@
 # created: 2018-07-02
 
 """
-CloudLinux Build System RPM utility functions unit tests.
+AlmaLinux Build System RPM utility functions unit tests.
 """
 
 import hashlib
