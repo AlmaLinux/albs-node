@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-10-18
-
 """
 Build System functions for working with configuration files.
 """
@@ -12,15 +8,12 @@ import platform
 
 import cerberus
 import yaml
-
-from build_node.utils.file_utils import normalize_path
-
-__all__ = ['locate_config_file', 'BaseConfig']
+from albs_common_lib.utils.file_utils import normalize_path
 
 
 class ConfigValidator(cerberus.Validator):
     """
-    Custom validator for CloudLinux Build System configuration objects.
+    Custom validator for AlmaLinux Build System configuration objects.
     """
 
     def _validate_type_timedelta(self, value):
@@ -82,7 +75,11 @@ class BaseConfig(object):
     """Base configuration object for Build System processes."""
 
     def __init__(
-        self, default_config, config_path=None, schema=None, **cmd_args
+        self,
+        default_config,
+        config_path=None,
+        schema=None,
+        **cmd_args,
     ):
         """
         Configuration object initialization.
@@ -103,12 +100,12 @@ class BaseConfig(object):
         ValueError
             If configuration didn't pass validation.
         """
-        self.__config = default_config
+        self._config = default_config
         if config_path:
             self.__parse_config_file(config_path)
         for key, value in cmd_args.items():
-            if value is not None and key in self.__config:
-                self.__config[key] = value
+            if value is not None and key in self._config:
+                self._config[key] = value
         self.__validate_config(schema)
 
     @staticmethod
@@ -134,25 +131,25 @@ class BaseConfig(object):
         return host_name.rsplit('.', 2)[0]
 
     def __dir__(self):
-        return list(self.__config.keys())
+        return list(self._config.keys())
 
     def __getattr__(self, attr):
-        if attr in self.__config:
-            return self.__config[attr]
+        if attr in self._config:
+            return self._config[attr]
         raise AttributeError(attr)
 
     def __parse_config_file(self, config_path):
         with open(config_path, 'rb') as fd:
             config = yaml.safe_load(fd)
         if config:
-            self.__config.update(config)
+            self._config.update(config)
 
     def __validate_config(self, schema):
         validator = ConfigValidator(schema or {})
-        if not validator.validate(self.__config):
+        if not validator.validate(self._config):
             error_list = [
                 '{0}: {1}'.format(k, ', '.join(v))
                 for k, v in validator.errors.items()
             ]
             raise ValueError('. '.join(error_list))
-        self.__config = validator.document
+        self._config = validator.document

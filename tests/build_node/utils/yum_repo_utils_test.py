@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2020-02-20
-
 """build_node.utils.yum_repo_utils module unit tests."""
 
 import os
@@ -9,7 +5,8 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from build_node.errors import DataNotFoundError
+from albs_common_lib.errors import DataNotFoundError
+
 from build_node.utils.yum_repo_utils import get_repo_modules_yaml_path
 
 __all__ = ['TestGetRepoModulesYamlPath']

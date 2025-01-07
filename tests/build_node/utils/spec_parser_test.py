@@ -1,11 +1,7 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-11-03
-
 import datetime
 from unittest import TestCase
 
-from build_node.utils.spec_parser import RPMChangelogRecord
+from albs_common_lib.utils.spec_parser import RPMChangelogRecord
 
 __all__ = ['TestRPMChangelogRecord']
 

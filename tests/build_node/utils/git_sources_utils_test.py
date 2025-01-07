@@ -1,6 +1,6 @@
 from unittest.mock import ANY, patch
 
-from build_node.utils import git_sources_utils
+from albs_common_lib.utils import git_sources_utils
 
 
 def test_download_all(fs):

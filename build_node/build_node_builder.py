@@ -1,9 +1,5 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-10-19
-
 """
-CloudLinux Build System build thread implementation.
+AlmaLinux Build System build thread implementation.
 """
 
 import datetime
@@ -13,31 +9,30 @@ import os
 import platform
 import pprint
 import random
-import threading
 import typing
 import urllib.parse
 
 import requests
 import requests.adapters
+from albs_build_lib.builder.base_builder import measure_stage
+from albs_build_lib.builder.base_thread_slave_builder import BaseSlaveBuilder
+from albs_build_lib.builder.models import Task
+from albs_common_lib.errors import BuildError, BuildExcluded
+from albs_common_lib.utils.file_utils import (
+    filter_files,
+    rm_sudo,
+)
 from immudb_wrapper import ImmudbWrapper
 from requests.packages.urllib3.util.retry import Retry
 from sentry_sdk import capture_exception
 
 from build_node import constants
-from build_node.build_node_errors import BuildError, BuildExcluded
-from build_node.builders.base_builder import measure_stage
 from build_node.builders.base_rpm_builder import BaseRPMBuilder
-from build_node.models import Task
 from build_node.uploaders.pulp import PulpRpmUploader
 from build_node.utils.codenotary import notarize_build_artifacts
-from build_node.utils.file_utils import (
-    clean_dir,
-    filter_files,
-    rm_sudo,
-)
 
 
-class BuildNodeBuilder(threading.Thread):
+class BuildNodeBuilder(BaseSlaveBuilder):
     """Build thread."""
 
     def __init__(
@@ -62,19 +57,23 @@ class BuildNodeBuilder(threading.Thread):
         graceful_terminated_event : threading.Event
             Shows, if process got "kill -10" signal.
         """
-        super(BuildNodeBuilder, self).__init__(name=f'Builder-{thread_num}')
+        super().__init__(
+            thread_num=thread_num,
+        )
         self.__config = config
+        # current task processing start timestamp
+        self.__start_ts = None
         self.__working_dir = os.path.join(
             config.working_dir, 'builder-{0}'.format(thread_num)
         )
         self.init_working_dir(self.__working_dir)
-        self.__logger = None
-        self.__current_task_id = None
-        # current task processing start timestamp
-        self.__start_ts = None
+        self.__terminated_event = terminated_event
+        self.__graceful_terminated_event = graceful_terminated_event
         # current task builder object
         self.__builder = None
         self.__session = None
+        self.__logger = None
+        self.__current_task_id = None
         self._immudb_wrapper = None
         self._codenotary_enabled = self.__config.codenotary_enabled
         self._build_stats: typing.Optional[
@@ -87,9 +86,6 @@ class BuildNodeBuilder(threading.Thread):
             self.__config.pulp_chunk_size,
             self.__config.pulp_uploader_max_workers,
         )
-
-        self.__terminated_event = terminated_event
-        self.__graceful_terminated_event = graceful_terminated_event
         self.__hostname = platform.node()
         self.__task_queue = task_queue
 
@@ -149,8 +145,12 @@ class BuildNodeBuilder(threading.Thread):
                 )
                 capture_exception(e)
             finally:
-                only_logs = not bool(
-                    filter_files(artifacts_dir, lambda f: f.endswith('.rpm'))
+                only_logs = not (
+                    bool(
+                        filter_files(
+                            artifacts_dir, lambda f: f.endswith('.rpm')
+                        )
+                    )
                 )
                 if success is False:
                     only_logs = True
@@ -220,7 +220,9 @@ class BuildNodeBuilder(threading.Thread):
                         self.__report_excluded_task(task, build_artifacts)
                     else:
                         self.__report_done_task(
-                            task, success=success, artifacts=build_artifacts
+                            task,
+                            success=success,
+                            artifacts=build_artifacts,
                         )
                 except Exception:
                     self.__logger.exception(
@@ -258,7 +260,7 @@ class BuildNodeBuilder(threading.Thread):
 
     def __build_packages(self, task, task_dir, artifacts_dir):
         """
-        Creates a suitable builder instance and builds RPM or Debian packages.
+        Creates a suitable builder instance and builds RPM packages.
 
         Parameters
         ----------
@@ -309,7 +311,12 @@ class BuildNodeBuilder(threading.Thread):
             **kwargs,
         )
 
-    def __report_done_task(self, task, success=True, artifacts=None):
+    def __report_done_task(
+        self,
+        task,
+        success=True,
+        artifacts=None,
+    ):
         if not artifacts:
             artifacts = []
         kwargs = {
@@ -350,7 +357,8 @@ class BuildNodeBuilder(threading.Thread):
         **parameters,
     ):
         full_url = urllib.parse.urljoin(
-            self.__config.master_url, f'build_node/{endpoint}'
+            self.__config.master_url,
+            f'build_node/{endpoint}',
         )
         if endpoint in ('build_done', 'get_task'):
             session_method = self.__session.post
@@ -358,7 +366,9 @@ class BuildNodeBuilder(threading.Thread):
             session_method = self.__session.get
         try:
             response = session_method(
-                full_url, json=parameters, timeout=self.__config.request_timeout
+                full_url,
+                json=parameters,
+                timeout=self.__config.request_timeout,
             )
             # Special case when build was already done
             if response.status_code == requests.codes.conflict:
@@ -369,19 +379,6 @@ class BuildNodeBuilder(threading.Thread):
             self.__logger.exception('Max retries exceeded. %s', err_msg)
         except Exception:
             self.__logger.exception('%s', err_msg)
-
-    @staticmethod
-    def init_working_dir(working_dir):
-        """
-        Creates a non-existent working directory or cleans it up from previous
-        builds.
-        """
-        if os.path.exists(working_dir):
-            logging.debug('cleaning the %s working directory', working_dir)
-            clean_dir(working_dir)
-        else:
-            logging.debug('creating the %s working directory', working_dir)
-            os.makedirs(working_dir, 0o750)
 
     def __init_task_logger(self, log_file):
         """
@@ -422,35 +419,6 @@ class BuildNodeBuilder(threading.Thread):
         task_handler.flush()
         task_handler.close()
         self.__logger.handlers.remove(task_handler)
-
-    @staticmethod
-    def init_thread_logger(log_file):
-        """
-        Build thread logger initialization.
-
-        Parameters
-        ----------
-        log_file : str
-            Log file path.
-
-        Returns
-        -------
-        logging.Logger
-            Build thread logger.
-        """
-        logger = logging.getLogger(
-            'bt-{0}-logger'.format(threading.current_thread().name)
-        )
-        logger.handlers = []
-        logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            "%(asctime)s %(levelname)-8s: %(message)s", "%H:%M:%S %d.%m.%y"
-        )
-        handler = logging.FileHandler(log_file)
-        handler.setLevel(logging.DEBUG)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        return logger
 
     @property
     def current_task_id(self):

@@ -1,5 +1,5 @@
 import os
-from build_node.utils import index_utils
+from albs_common_lib.utils import index_utils
 
 
 def test_index_utils(request):

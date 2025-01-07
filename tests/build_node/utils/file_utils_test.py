@@ -4,9 +4,8 @@ import os
 from unittest.mock import Mock, patch
 
 import pycurl
+from albs_common_lib.utils import file_utils
 from pyfakefs.fake_filesystem_unittest import TestCase
-
-from build_node.utils import file_utils
 
 
 class TestFileUtils(TestCase):

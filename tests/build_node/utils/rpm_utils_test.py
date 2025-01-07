@@ -1,9 +1,5 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-07-02
-
 """
-CloudLinux Build System RPM utility functions unit tests.
+AlmaLinux Build System RPM utility functions unit tests.
 """
 
 import hashlib
@@ -14,10 +10,11 @@ import sys
 import tempfile
 import unittest
 
-from build_node.errors import CommandExecutionError
-from build_node.utils.file_utils import hash_file
+from albs_common_lib.errors import CommandExecutionError
+from albs_common_lib.utils.file_utils import hash_file
+from albs_common_lib.utils.rpm_utils import flag_to_string, string_to_version
+
 from build_node.utils.test_utils import MockShellCommand
-from build_node.utils.rpm_utils import string_to_version, flag_to_string
 
 __all__ = ['TestUnpackSrcRpm']
 
@@ -51,7 +48,7 @@ class TestUnpackSrcRpm(unittest.TestCase):
                    'sys.stdout.buffer.write(fd.read()) ; fd.close()'.format(
                        self.cpio_file)
         with MockShellCommand('rpm2cpio', rpm2cpio) as cmd:
-            from build_node.utils.rpm_utils import unpack_src_rpm
+            from albs_common_lib.utils.rpm_utils import unpack_src_rpm
             unpack_src_rpm(self.rpm_file, self.output_dir)
             for file_name, checksum in self.checksums.items():
                 file_path = os.path.join(self.output_dir, file_name)
@@ -63,7 +60,7 @@ class TestUnpackSrcRpm(unittest.TestCase):
 
     def test_missing_file(self):
         """build_node.utils.rpm_utils.unpack_src_rpm reports missing src-RPM"""
-        from build_node.utils.rpm_utils import unpack_src_rpm
+        from albs_common_lib.utils.rpm_utils import unpack_src_rpm
         self.assertRaises(CommandExecutionError, unpack_src_rpm,
                           'some_missing_file', self.output_dir)
 

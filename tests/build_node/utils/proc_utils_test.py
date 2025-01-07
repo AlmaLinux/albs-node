@@ -2,7 +2,7 @@ import errno
 import os
 from unittest.mock import patch
 
-from build_node.utils import proc_utils
+from albs_common_lib.utils import proc_utils
 
 
 def test_proc_utils():

@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-12-03
-
 """
 build_node.builders.base_rpm_builder_tests module unit tests.
 """
@@ -14,12 +10,13 @@ import time
 from unittest.mock import Mock, patch
 
 import pytest
-from build_node.build_node_errors import BuildConfigurationError, BuildError
-from build_node.builders.base_rpm_builder import BaseRPMBuilder
-from build_node.mock.mock_config import MockConfig
-from build_node.mock.mock_environment import MockError, MockResult
-from build_node.utils.file_utils import clean_dir
+from albs_build_lib.builder.mock.mock_config import MockConfig
+from albs_build_lib.builder.mock.mock_environment import MockError, MockResult
+from albs_common_lib.errors import BuildConfigurationError, BuildError
+from albs_common_lib.utils.file_utils import clean_dir
 from pyfakefs.fake_filesystem_unittest import TestCase
+
+from build_node.builders.base_rpm_builder import BaseRPMBuilder
 
 
 class TestConfigureMockNpmProxy(TestCase):
