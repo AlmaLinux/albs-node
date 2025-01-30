@@ -39,6 +39,7 @@ from build_node.utils.file_utils import download_file
 from build_node.utils.git_sources_utils import (
     AlmaSourceDownloader,
     CentpkgDowloader,
+    FedpkgDownloader,
 )
 from build_node.utils.index_utils import extract_metadata
 from build_node.utils.spec_parser import SpecParser, SpecSource
@@ -151,6 +152,7 @@ class BaseRPMBuilder(BaseBuilder):
         try:
             centos_sources_downloaded = False
             alma_sources_downloaded = False
+            fedora_sources_downloaded = False
             if self.task.is_srpm_build_required():
                 url_str = str(self.task.ref.url)
                 if url_str.endswith('/'):
@@ -173,16 +175,19 @@ class BaseRPMBuilder(BaseBuilder):
                         self.logger.info('AlmaLinux sources were not downloaded, calling centpkg')
                         centos_sources_downloaded = self.prepare_centos_sources(git_sources_dir)
                     if not alma_sources_downloaded and not centos_sources_downloaded:
-                        self.logger.warning(
-                            'Both AlmaLinux and CentOS downloaders failed, '
-                            'assuming all sources are already in place'
-                        )
+                        self.logger.info('CentOS sources were not downloaded, calling fedpkg')
+                        fedora_sources_downloaded = self.prepare_fedora_sources(git_sources_dir)
+                        if not fedora_sources_downloaded:
+                            self.logger.warning(
+                                'AlmaLinux, CentOS and Fedora downloaders failed, '
+                                'assuming all sources are already in place'
+                            )
                     if os.path.exists(sources_dir):
                         src_suffix_dir = 'SOURCES'
                 self.execute_pre_build_hook(git_sources_dir)
                 autospec_conditions = [
                     self.task.is_rpmautospec_required(),
-                    alma_sources_downloaded or centos_sources_downloaded
+                    alma_sources_downloaded or centos_sources_downloaded or fedora_sources_downloaded
                 ]
                 if all(autospec_conditions):
                     source_srpm_dir, spec_file = self.prepare_autospec_sources(
@@ -365,6 +370,11 @@ class BaseRPMBuilder(BaseBuilder):
     @staticmethod
     def prepare_centos_sources(git_sources_dir: str) -> bool:
         downloader = CentpkgDowloader(git_sources_dir)
+        return downloader.download_all()
+
+    @staticmethod
+    def prepare_fedora_sources(git_sources_dir: str) -> bool:
+        downloader = FedpkgDownloader(git_sources_dir)
         return downloader.download_all()
 
     def prepare_koji_sources(self, git_repo, git_sources_dir, output_dir,

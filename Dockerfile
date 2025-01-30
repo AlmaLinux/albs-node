@@ -9,7 +9,8 @@ RUN <<EOT
     gcc gcc-c++ make cmake git mock mock-rpmautospec keyrings-filesystem sudo \
     libicu libicu-devel kernel-rpm-macros createrepo_c cpio \
     python3-devel python3-lxml python3-createrepo_c python3-libmodulemd \
-    centpkg
+    centpkg \
+    fedpkg
   dnf clean all
 EOT
 
