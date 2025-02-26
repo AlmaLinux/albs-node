@@ -9,7 +9,7 @@ CloudLinux Build System git wrapper.
 import functools
 import fcntl
 import errno
-import pipes
+import shlex
 import subprocess
 import collections
 import tempfile
@@ -301,7 +301,7 @@ def git_push(repo_dir, repository, tags=False, gerrit=False, branch=None,
 
     @raise AltGitError: If git return status is not 0.
     """
-    cmd = ["git", "push", pipes.quote(repository)]
+    cmd = ["git", "push", shlex.quote(repository)]
     if tags:
         cmd.append(" --tags")
     if gerrit:
@@ -357,7 +357,7 @@ def git_create_tag(repo_dir, git_tag, force=False):
         cmd = "git tag"
         if force:
             cmd += " -f"
-        proc = subprocess.Popen("{0} {1}".format(cmd, pipes.quote(git_tag)),
+        proc = subprocess.Popen("{0} {1}".format(cmd, shlex.quote(git_tag)),
                                 cwd=repo_dir, shell=True,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
@@ -389,7 +389,7 @@ def git_commit(repo_dir, message, commit_all=True, signoff=False):
     if signoff:
         cmd += " --signoff"
     try:
-        proc = subprocess.Popen(cmd % pipes.quote(message), cwd=repo_dir,
+        proc = subprocess.Popen(cmd % shlex.quote(message), cwd=repo_dir,
                                 shell=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
         out, err = proc.communicate()
