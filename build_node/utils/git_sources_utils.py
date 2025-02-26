@@ -95,3 +95,19 @@ class CentpkgDowloader(BaseSourceDownloader):
         if code != 0:
             return False
         return True
+
+
+class FedpkgDownloader(BaseSourceDownloader):
+
+    def download_source(self, checksum: str, dst_path: str) -> str:
+        pass
+
+    def download_all(self):
+        sources_file = os.path.join(self._sources_dir, 'sources')
+        if not os.path.isfile(sources_file):
+            return False
+        code, out, err = local['fedpkg'].with_cwd(self._sources_dir).run(
+            args='sources', retcode=None)
+        if code != 0:
+            return False
+        return True
