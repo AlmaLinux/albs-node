@@ -32,7 +32,7 @@ class TestConfigureMockNpmProxy(TestCase):
         """
         BaseRPMBuilder.configure_mock_npm_proxy configures NPM and Yarn proxy
         """
-        BaseRPMBuilder.configure_mock_npm_proxy(
+        BaseRPMBuilder.configure_npm_proxy(
             self.mock_config, self.npm_proxy
         )
         self.mock_config.dump_to_file(self.config_file)
@@ -47,7 +47,7 @@ class TestConfigureMockNpmProxy(TestCase):
         """BaseRPMBuilder.configure_mock_npm_proxy reports invalid proxy URL"""
         self.assertRaises(
             BuildConfigurationError,
-            BaseRPMBuilder.configure_mock_npm_proxy,
+            BaseRPMBuilder.configure_npm_proxy,
             self.mock_config,
             'bad proxy',
         )

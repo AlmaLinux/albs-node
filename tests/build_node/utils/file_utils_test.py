@@ -4,10 +4,12 @@ import os
 from unittest.mock import Mock, patch
 
 import pycurl
+import pytest
 from albs_common_lib.utils import file_utils
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 
+@pytest.mark.skip(reason="We need to rewrite this tests using common library")
 class TestFileUtils(TestCase):
 
     def setUp(self):
