@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-10-07
-
 """build_node.build_node_config module unit tests."""
 
 import platform

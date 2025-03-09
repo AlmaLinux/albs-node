@@ -1,9 +1,5 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2017-10-19
-
 """
-CloudLinux Build System build node configuration storage.
+AlmaLinux Build System build node configuration storage.
 """
 
 import os

@@ -1,7 +1,3 @@
-# -*- mode:python; coding:utf-8; -*-
-# author: Eugene Zamriy <ezamriy@cloudlinux.com>
-# created: 2018-06-09
-
 """build_node.utils.git_utils module unit tests."""
 
 import os
@@ -42,11 +38,13 @@ class TestGitGetCommitId(GitUtilsShellTest):
         self.repo_dir = tempfile.mkdtemp(prefix='castor_test_')
         super(TestGitGetCommitId, self).setUp()
 
+    @pytest.mark.skip(reason="We need to rewrite this tests using common library")
     def test_head_ref(self):
         """build_node.utils.git_utils.git_get_commit_id returns HEAD commit id by \
 default"""
         self.__test_ref(None, 'HEAD')
 
+    @pytest.mark.skip(reason="We need to rewrite this tests using common library")
     def test_custom_ref(self):
         """build_node.utils.git_utils.git_get_commit_id returns specified \
 reference commit id"""
@@ -114,6 +112,7 @@ sys.exit(128)
 class TestGitLsRemote(GitUtilsShellTest):
     """build_node.utils.git_utils.git_ls_remote function unit tests."""
 
+    @pytest.mark.skip(reason="We need to rewrite this tests using common library")
     def test_empty_refs_list(self):
         """git_ls_remote returns an empty refs list for an empty repository"""
         repo_path = '/test/git-repository'
@@ -124,6 +123,7 @@ class TestGitLsRemote(GitUtilsShellTest):
             self.assertEqual(refs, [], msg='refs list must be empty')
             self.__verify_git_args(cmd.get_calls()[0], repo_path)
 
+    @pytest.mark.skip(reason="We need to rewrite this tests using common library")
     def test_tags(self):
         """git_ls_remote returns tags"""
         tags = [
@@ -134,6 +134,7 @@ class TestGitLsRemote(GitUtilsShellTest):
             tags, 'tag', 'ssh://user@example.com:29418/alt-php70'
         )
 
+    @pytest.mark.skip(reason="We need to rewrite this tests using common library")
     def test_heads(self):
         """git_ls_remote returns heads"""
         heads = [

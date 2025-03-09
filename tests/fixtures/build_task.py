@@ -1,5 +1,5 @@
 import pytest
-from build_node.models import Task
+from albs_build_lib.builder.models import Task
 
 
 @pytest.fixture
