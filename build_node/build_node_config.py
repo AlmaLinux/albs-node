@@ -30,7 +30,7 @@ DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
 DEFAULT_JWT_TOKEN = 'test_jwt'
 DEFAULT_CACHE_UPDATE_INTERVAL = 600
 DEFAULT_EXCLUSIONS_URL = (
-    'https://git.almalinux.org/almalinux/build-node-exclusions/raw/branch/main'
+    'https://git.almalinux.org/almalinux/build-node-exclusions/raw/branch/main/'
 )
 DEFAULT_CACHE_SIZE = 1
 
