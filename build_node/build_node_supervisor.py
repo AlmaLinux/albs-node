@@ -103,7 +103,13 @@ class BuilderSupervisor(BaseSupervisor):
                 except Exception:
                     logging.exception('Cannot get excluded packages')
                     return []
-        return self.__cached_config.get('excluded_packages', [])
+
+        excluded_packages = self.__cached_config.get(
+            'excluded_packages', []
+        )
+        logging.debug('Excluded packages in this node: %s', excluded_packages)
+        return excluded_packages
+
 
     def run(self):
         self.__generate_request_session()
