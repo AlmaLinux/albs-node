@@ -1,6 +1,7 @@
 import logging
 import traceback
 import urllib.parse
+from queue import Queue
 
 import requests
 import requests.adapters
@@ -14,7 +15,13 @@ from build_node import constants
 
 class BuilderSupervisor(BaseSupervisor):
 
-    def __init__(self, config, builders, terminated_event, task_queue):
+    def __init__(
+        self,
+        config,
+        builders,
+        terminated_event,
+        task_queue: Queue,
+    ):
         self.__session = None
         self.__task_queue = task_queue
         self.__cached_config = TTLCache(
@@ -44,42 +51,47 @@ class BuilderSupervisor(BaseSupervisor):
         self.__session.mount('https://', adapter)
 
     def __request_build_task(self):
-        if not self.__task_queue.full():
-            supported_arches = [self.config.base_arch]
-            excluded_packages = self.get_excluded_packages()
-            if self.config.base_arch == 'x86_64':
-                supported_arches.append('i686')
-            if self.config.build_src:
-                supported_arches.append('src')
-            full_url = urllib.parse.urljoin(
-                self.config.master_url, 'build_node/get_task'
+        if self.__task_queue.unfinished_tasks >= self.config.threads_count:
+            return {}
+        supported_arches = [self.config.base_arch]
+        excluded_packages = self.get_excluded_packages()
+        if self.config.base_arch == 'x86_64':
+            supported_arches.append('i686')
+        if self.config.build_src:
+            supported_arches.append('src')
+        full_url = urllib.parse.urljoin(
+            self.config.master_url, 'build_node/get_task'
+        )
+        data = {
+            'supported_arches': supported_arches,
+            'excluded_packages': excluded_packages,
+        }
+        try:
+            response = self.__session.post(
+                full_url,
+                json=data,
+                timeout=self.config.request_timeout,
             )
-            data = {
-                'supported_arches': supported_arches,
-                'excluded_packages': excluded_packages,
-            }
-            try:
-                response = self.__session.post(
-                    full_url, json=data, timeout=self.config.request_timeout
-                )
-                response.raise_for_status()
-                return response.json()
-            except Exception:
-                logging.error(
-                    "Can't report active task to master:\n%s",
-                    traceback.format_exc(),
-                )
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            logging.exception(
+                "Failed to request build task from master:",
+            )
+            return {}
 
     def __report_active_tasks(self):
         active_tasks = self.get_active_tasks()
-        logging.debug('Sending active tasks: {}'.format(active_tasks))
+        logging.debug('Sending active tasks: %s', active_tasks)
         full_url = urllib.parse.urljoin(
             self.config.master_url, 'build_node/ping'
         )
         data = {'active_tasks': [int(item) for item in active_tasks]}
         try:
             self.__session.post(
-                full_url, json=data, timeout=self.config.request_timeout
+                full_url,
+                json=data,
+                timeout=self.config.request_timeout,
             )
         except Exception:
             logging.error(
@@ -109,7 +121,6 @@ class BuilderSupervisor(BaseSupervisor):
         )
         logging.debug('Excluded packages in this node: %s', excluded_packages)
         return excluded_packages
-
 
     def run(self):
         self.__generate_request_session()

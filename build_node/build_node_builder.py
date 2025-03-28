@@ -11,6 +11,7 @@ import pprint
 import random
 import typing
 import urllib.parse
+from queue import Queue
 
 import requests
 import requests.adapters
@@ -41,7 +42,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
         thread_num,
         terminated_event,
         graceful_terminated_event,
-        task_queue,
+        task_queue: Queue,
     ):
         """
         Build thread initialization.
@@ -56,6 +57,8 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             Shows, if process got "kill -15" signal.
         graceful_terminated_event : threading.Event
             Shows, if process got "kill -10" signal.
+        task_queue: queue.Queue
+            Shared queue with build tasks
         """
         super().__init__(
             thread_num=thread_num,
@@ -243,6 +246,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                     #       without root permissions
                     rm_sudo(task_dir)
                 self.__builder = None
+                self.__task_queue.task_done()
 
     @measure_stage("cas_notarize_artifacts")
     def __cas_notarize_artifacts(
