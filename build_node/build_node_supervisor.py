@@ -75,10 +75,10 @@ class BuilderSupervisor(BaseSupervisor):
             response.raise_for_status()
             return response.json()
         except Exception:
-            logging.error(
-                "Can't report active task to master:\n%s",
-                traceback.format_exc(),
+            logging.exception(
+                "Failed to request build task from master:",
             )
+            return {}
 
     def __report_active_tasks(self):
         active_tasks = self.get_active_tasks()
