@@ -24,7 +24,7 @@ COPY requirements.txt .
 RUN <<EOT
   set -ex
   python3 -m ensurepip
-  pip3 install -r requirements.txt
+  pip3 install -r requirements.txt --user
   rm -rf requirements.txt ~/.cache/pip
 EOT
 
