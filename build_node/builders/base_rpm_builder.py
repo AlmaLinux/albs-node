@@ -62,11 +62,16 @@ MODSIGN_CONTENT = r"""
 %__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/"  ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print -exec /usr/local/bin/modsign %{modsign_os} {} \\\;}
 %__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -print -exec rm -f {} \\\;}
 %__spec_install_post \\
+        %{?__brp_kmod_set_exec_bit} \\
         %{?__debug_package:%{__debug_install_post}} \\
         %{__arch_install_post} \\
         %{__os_install_post} \\
+        %{?__brp_kmod_pre_sign_process} \\
         %{__brp_kmod_sign} \\
         %{__brp_kmod_post_sign_process} \\
+        %{?__brp_kmod_compress} \\
+        %{?__brp_kmod_post_compress_process} \\
+        %{?__brp_kmod_restore_perms} \\
         %{nil}
 """
 MODSIGN_MACROS_PATH = 'etc/rpm/macros.modsign'
