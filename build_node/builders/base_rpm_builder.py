@@ -523,7 +523,13 @@ class BaseRPMBuilder(BaseBuilder):
                 parsed_spec = SpecParser(
                     spec_path, defs
                 )
-            except:
+            except Exception as exc:
+                self.logger.debug(
+                    'Error: %s. Trying to use SpecParser with different '
+                    '_sourcedir: %s',
+                    str(exc),
+                    git_sources_dir
+                )
                 defs['_sourcedir'] = git_sources_dir
                 parsed_spec = SpecParser(
                     spec_path, defs
