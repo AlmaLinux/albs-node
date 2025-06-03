@@ -44,7 +44,7 @@ from albs_common_lib.utils.git_utils import (
 from albs_common_lib.utils.index_utils import extract_metadata
 from albs_common_lib.utils.ported import to_unicode
 from albs_common_lib.utils.rpm_utils import unpack_src_rpm
-from albs_common_lib.utils.spec_parser import SpecParser, SpecSource
+from albs_common_lib.utils.spec_parser import SpecParser, SpecPatch, SpecSource
 from pyrpm.spec import Spec, replace_macros
 
 from build_node.utils.git_sources_utils import (
@@ -514,19 +514,39 @@ class BaseRPMBuilder(BaseBuilder):
         new_spec_path = os.path.join(output_dir, spec_file_name)
         shutil.copy(spec_path, new_spec_path)
         try:
-            parsed_spec = SpecParser(
-                spec_path, self.task.platform.data.get('definitions')
-            )
+            self.logger.debug("Trying to use SpecParser")
+            defs = self.task.platform.data.get('definitions', {}).copy()
+            sources_dir = os.path.join(git_sources_dir, 'SOURCES')
+            if os.path.exists(sources_dir):
+                defs['_sourcedir'] = sources_dir
+            try:
+                parsed_spec = SpecParser(
+                    spec_path, defs
+                )
+            except Exception as exc:
+                self.logger.debug(
+                    'Error: %s. Trying to use SpecParser with different '
+                    '_sourcedir: %s',
+                    str(exc),
+                    git_sources_dir
+                )
+                defs['_sourcedir'] = git_sources_dir
+                parsed_spec = SpecParser(
+                    spec_path, defs
+                )
             sources = parsed_spec.source_package.sources
             patches = parsed_spec.source_package.patches
-        except Exception:
+        except Exception as exc:
+            self.logger.debug("SpecParser failed: %s", str(exc))
             try:
                 parsed_spec = Spec.from_file(spec_path)
                 sources = [
-                    replace_macros(s, parsed_spec) for s in parsed_spec.sources
+                    SpecSource(replace_macros(s, parsed_spec), position)
+                    for position, s in enumerate(parsed_spec.sources)
                 ]
                 patches = [
-                    replace_macros(p, parsed_spec) for p in parsed_spec.patches
+                    SpecPatch(replace_macros(p, parsed_spec), position)
+                    for position, p in enumerate(parsed_spec.patches)
                 ]
             except Exception:
                 self.logger.exception(
