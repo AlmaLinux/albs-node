@@ -11,6 +11,7 @@ DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
 DEFAULT_QUEUE_SIZE = DEFAULT_THREADS_COUNT + 1
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
+DEFAULT_MAINTENANCE_MODE_FILE = '/tmp/graceful_stop'
 DEFAULT_SENTRY_DSN = ''
 DEFAULT_SENTRY_ENVIRONMENT = 'dev'
 DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
@@ -57,6 +58,9 @@ class BuildNodeConfig(BaseConfig):
     working_dir : str
         Build node working directory path. The directory will be used for
         temporary files storage.
+    maintenance_mode_file : str
+        Path to maintenance mode file. If the file exists, the build node will
+        not request new tasks.
     git_cache_locks_dir : str
         Git repositories cache locks directory.
     git_repos_cache_dir : str
@@ -96,6 +100,7 @@ class BuildNodeConfig(BaseConfig):
             'threads_count': DEFAULT_THREADS_COUNT,
             'queue_size': DEFAULT_QUEUE_SIZE,
             'working_dir': DEFAULT_WORKING_DIR,
+            'maintenance_mode_file': DEFAULT_MAINTENANCE_MODE_FILE,
             # NOTE: those parameters are added for old Build System code
             #       compatibility
             'git_cache_locks_dir': '/srv/alternatives/git_repos_cache/locks/',
@@ -138,6 +143,7 @@ class BuildNodeConfig(BaseConfig):
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
             'queue_size': {'type': 'integer', 'min': 2, 'required': True},
             'working_dir': {'type': 'string', 'required': True},
+            'maintenance_mode_file': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
             'git_repos_cache_dir': {'type': 'string', 'required': True},
             'git_extra_options': {

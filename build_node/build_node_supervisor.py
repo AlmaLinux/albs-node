@@ -1,6 +1,7 @@
 import logging
 import traceback
 import urllib.parse
+from pathlib import Path
 from queue import Queue
 
 import requests
@@ -131,6 +132,16 @@ class BuilderSupervisor(BaseSupervisor):
                 logging.warning('All builders are dead, exiting')
                 break
             self.__report_active_tasks()
+
+            if Path(self.config.maintenance_mode_file).exists():
+                logging.warning(
+                    'maintenance mode file detected at "%s". '
+                    'not taking new tasks, sleeping for 30s',
+                    self.config.maintenance_mode_file
+                )
+                self.terminated_event.wait(30)
+                continue
+
             task = self.__request_build_task()
             if task:
                 if not task.get('is_secure_boot'):
