@@ -679,7 +679,11 @@ class BaseRPMBuilder(BaseBuilder):
             repositories=yum_repos,
             **yum_config_kwargs,
         )
-        mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
+        mock_config_kwargs = {
+            'use_bootstrap': True, 'use_bootstrap_image': False,
+            'macros': {}
+        }
+
         target_arch = task.arch
         use_host_resolv = True
         if target_arch == 'src':
@@ -697,6 +701,10 @@ class BaseRPMBuilder(BaseBuilder):
                 continue
             elif key == 'use_host_resolv':
                 use_host_resolv = value
+            elif key == 'bootstrap_image':
+                if target_arch not in ('x86_64_v2', 'i686'):
+                    mock_config_kwargs['use_bootstrap_image'] = True
+                    mock_config_kwargs['bootstrap_image'] = value
             else:
                 mock_config_kwargs[key] = value
         mock_config = MockConfig(
