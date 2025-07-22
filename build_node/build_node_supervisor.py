@@ -108,7 +108,10 @@ class BuilderSupervisor(BaseSupervisor):
             )
             if file_url_exists(uri):
                 try:
-                    response = requests.get(uri)
+                    response = requests.get(
+                        uri,
+                        timeout=self.config.request_timeout,
+                    )
                     response.raise_for_status()
                     self.__cached_config['excluded_packages'] = (
                         response.text.splitlines()
