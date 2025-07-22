@@ -14,4 +14,4 @@ pulpcore-client==3.67.0
 pydantic==2.9.2
 python-rpm-spec==0.15.0
 git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.8#egg=immudb_wrapper
-git+https://github.com/AlmaLinux/albs-build-lib.git@0.1.4#egg=albs_build_lib
+git+https://github.com/AlmaLinux/albs-build-lib.git@0.1.5#egg=albs_build_lib
