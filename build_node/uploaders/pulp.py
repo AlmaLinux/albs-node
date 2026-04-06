@@ -1,7 +1,6 @@
-import csv
 import logging
+import math
 import os
-import shutil
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,7 +8,6 @@ from typing import List, Optional, Tuple
 
 from albs_build_lib.builder.models import Artifact
 from albs_common_lib.utils.file_utils import hash_file
-from fsplit.filesplit import Filesplit
 from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
@@ -62,7 +60,6 @@ class PulpBaseUploader(BaseUploader):
         self._uploads_client = UploadsApi(api_client=api_client)
         self._tasks_client = TasksApi(api_client=api_client)
         self._artifacts_client = ArtifactsApi(api_client=api_client)
-        self._file_splitter = Filesplit()
         self._chunk_size = chunk_size
         self._max_workers = max_workers
         self._requests_timeout = requests_timeout
@@ -135,17 +132,17 @@ class PulpBaseUploader(BaseUploader):
         )
         return response.pulp_href, file_size
 
-    def _commit_upload(self, file_path: str, reference: str) -> str:
+    def _commit_upload(self, reference: str, file_sha256: str) -> str:
         """
         Commits upload and waits until upload will be transformed to artifact.
         Returns artifact reference upon completion.
 
         Parameters
         ----------
-        file_path : str
-            Path to the file.
         reference : str
             Upload reference in Pulp.
+        file_sha256 : str
+            Pre-computed SHA256 of the file.
 
         Returns
         -------
@@ -153,7 +150,6 @@ class PulpBaseUploader(BaseUploader):
             Reference to the created resource.
 
         """
-        file_sha256 = hash_file(file_path, hash_type='sha256')
         response = self._uploads_client.commit(
             reference,
             {'sha256': file_sha256},
@@ -168,41 +164,94 @@ class PulpBaseUploader(BaseUploader):
                 return pulp_href
             raise
 
-    def _put_large_file(self, file_path: str, reference: str):
-        temp_dir = tempfile.mkdtemp(prefix='pulp_uploader_')
-        try:
-            lower_bytes_limit = 0
-            total_size = os.path.getsize(file_path)
-            self._file_splitter.split(
-                file_path, self._chunk_size, output_dir=temp_dir
-            )
-            manifest_path = os.path.join(temp_dir, 'fs_manifest.csv')
-            with open(manifest_path, 'r') as f:
-                for meta in csv.DictReader(f):
-                    split_file_path = os.path.join(temp_dir, meta['filename'])
-                    upper_bytes_limit = (
-                        lower_bytes_limit + int(meta['filesize']) - 1
-                    )
-                    self._uploads_client.update(
-                        f'bytes {lower_bytes_limit}-{upper_bytes_limit}/'
-                        f'{total_size}',
-                        reference,
-                        split_file_path,
-                        _request_timeout=self._requests_timeout,
-                    )
-                    lower_bytes_limit += int(meta['filesize'])
-        finally:
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+    def _create_artifact_direct(
+        self, file_path: str, file_sha256: str
+    ) -> str:
+        response = self._artifacts_client.create(
+            file_path,
+            sha256=file_sha256,
+            _request_timeout=self._requests_timeout,
+        )
+        return response.pulp_href
 
-    def _send_file(self, file_path: str):
-        reference, file_size = self._create_upload(file_path)
-        if file_size > self._chunk_size:
-            self._logger.debug(
-                'File size exceeded %d, sending file in parts',
-                self._chunk_size,
+    def _put_large_file(self, file_path: str, reference: str):
+        total_size = os.path.getsize(file_path)
+
+        # Build list of (offset, length) chunk descriptors
+        chunks = []
+        offset = 0
+        while offset < total_size:
+            length = min(self._chunk_size, total_size - offset)
+            chunks.append((offset, length))
+            offset += length
+
+        def _upload_chunk(chunk_offset: int, chunk_length: int):
+            """Read a byte range from source and upload via a temp file."""
+            tmp_path = None
+            try:
+                with open(file_path, 'rb') as src:
+                    src.seek(chunk_offset)
+                    data = src.read(chunk_length)
+                tmp = tempfile.NamedTemporaryFile(
+                    delete=False, prefix='pulp_chunk_'
+                )
+                tmp_path = tmp.name
+                tmp.write(data)
+                tmp.close()
+                end_byte = chunk_offset + chunk_length - 1
+                content_range = (
+                    f'bytes {chunk_offset}-{end_byte}/{total_size}'
+                )
+                self._uploads_client.update(
+                    content_range,
+                    reference,
+                    tmp_path,
+                    _request_timeout=self._requests_timeout,
+                )
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+        with ThreadPoolExecutor(
+            max_workers=self._max_workers
+        ) as executor:
+            futures = {
+                executor.submit(_upload_chunk, off, length): (off, length)
+                for off, length in chunks
+            }
+            for future in as_completed(futures):
+                future.result()  # propagates any exception
+
+    def _send_file(self, file_path: str, file_sha256: str):
+        file_size = os.path.getsize(file_path)
+        file_name = os.path.basename(file_path)
+        start_time = time.time()
+        if file_size < self._chunk_size:
+            artifact_href = self._create_artifact_direct(
+                file_path, file_sha256
             )
+            elapsed = time.time() - start_time
+            self._logger.info(
+                'Upload complete: %s (%d bytes) via direct artifact'
+                ' in %.2fs',
+                file_name,
+                file_size,
+                elapsed,
+            )
+            return artifact_href
+        reference, _ = self._create_upload(file_path)
+        if file_size > self._chunk_size:
             self._put_large_file(file_path, reference)
+            num_chunks = math.ceil(file_size / self._chunk_size)
+            artifact_href = self._commit_upload(reference, file_sha256)
+            elapsed = time.time() - start_time
+            self._logger.info(
+                'Upload complete: %s (%d bytes) via %d chunks in %.2fs',
+                file_name,
+                file_size,
+                num_chunks,
+                elapsed,
+            )
         else:
             self._uploads_client.update(
                 f'bytes 0-{file_size - 1}/{file_size}',
@@ -210,7 +259,15 @@ class PulpBaseUploader(BaseUploader):
                 file_path,
                 _request_timeout=self._requests_timeout,
             )
-        artifact_href = self._commit_upload(file_path, reference)
+            artifact_href = self._commit_upload(reference, file_sha256)
+            elapsed = time.time() - start_time
+            self._logger.info(
+                'Upload complete: %s (%d bytes) via single chunk'
+                ' in %.2fs',
+                file_name,
+                file_size,
+                elapsed,
+            )
         return artifact_href
 
     def check_if_artifact_exists(self, sha256: str) -> Optional[str]:
@@ -270,7 +327,7 @@ class PulpBaseUploader(BaseUploader):
         file_sha256 = hash_file(filename, hash_type='sha256')
         reference = self.check_if_artifact_exists(file_sha256)
         if not reference:
-            reference = self._send_file(filename)
+            reference = self._send_file(filename, file_sha256)
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
