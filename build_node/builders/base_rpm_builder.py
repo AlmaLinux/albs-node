@@ -689,10 +689,17 @@ class BaseRPMBuilder(BaseBuilder):
                 mock_config_kwargs['macros'].update(value)
             elif key == 'rpmautospec_enable':
                 continue
+            elif key == 'use_shared_yum_cache':
+                continue
             elif key == 'use_host_resolv':
                 use_host_resolv = value
             else:
                 mock_config_kwargs[key] = value
+        shared_cache_key = None
+        if task.platform.data['mock'].get('use_shared_yum_cache'):
+            shared_cache_key = '{0}-{1}'.format(
+                task.platform.name.lower(), target_arch,
+            )
         mock_config = MockConfig(
             dist=task.platform.data.get('mock_dist'),
             rpmbuild_networking=True,
@@ -700,6 +707,7 @@ class BaseRPMBuilder(BaseBuilder):
             yum_config=yum_config,
             target_arch=target_arch,
             basedir=config.mock_basedir,
+            shared_cache_key=shared_cache_key,
             **mock_config_kwargs,
         )
         if task.is_secure_boot:
