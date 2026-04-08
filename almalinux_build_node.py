@@ -108,6 +108,13 @@ def init_working_dir(config):
             )
         )
         os.makedirs(config.mock_configs_storage_dir, 0o750)
+    if not os.path.exists(config.mock_cachedir):
+        logging.debug(
+            'creating the {0} mock cache directory'.format(
+                config.mock_cachedir
+            )
+        )
+        os.makedirs(config.mock_cachedir, 0o750)
 
 
 def init_sentry(config):

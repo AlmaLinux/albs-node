@@ -344,7 +344,10 @@ class BaseRPMBuilder(BaseBuilder):
         """
         if not spec_file:
             spec_file = self.locate_spec_file(sources_dir)
-        with self.mock_supervisor.environment(mock_config) as mock_env:
+        with self.mock_supervisor.environment(
+                mock_config,
+                cli_config_opts={'cache_topdir': self.config.mock_cachedir},
+            ) as mock_env:
             return mock_env.buildsrpm(
                 spec_file,
                 sources_dir,
@@ -369,7 +372,10 @@ class BaseRPMBuilder(BaseBuilder):
         rpm_result_dir = os.path.join(self.task_dir, 'rpm_result')
         rpm_mock_config = self.generate_mock_config(self.config, self.task)
         rpm_build_result = None
-        with self.mock_supervisor.environment(rpm_mock_config) as mock_env:
+        with self.mock_supervisor.environment(
+                rpm_mock_config,
+                cli_config_opts={'cache_topdir': self.config.mock_cachedir},
+            ) as mock_env:
             try:
                 rpm_build_result = mock_env.rebuild(
                     srpm_path,

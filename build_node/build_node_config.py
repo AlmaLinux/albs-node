@@ -193,6 +193,17 @@ class BuildNodeConfig(BaseConfig):
         return bool(self.immudb_username) and bool(self.immudb_password)
 
     @property
+    def mock_cachedir(self):
+        """
+        Mock yum/dnf package cache directory (config_opts['cache_topdir']).
+
+        Returns
+        -------
+        str
+        """
+        return os.path.join(self.working_dir, 'mock_cache')
+
+    @property
     def mock_configs_storage_dir(self):
         """
         Mock environments configuration files storage directory.
