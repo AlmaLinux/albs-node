@@ -20,6 +20,7 @@ from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
 from build_node.build_node_supervisor import BuilderSupervisor
 from build_node.utils.config import locate_config_file
+from build_node.utils.numa import build_numa_assignments
 
 running = True
 
@@ -171,15 +172,25 @@ def main(sys_args):
     builders = []
     task_queue = queue.Queue(maxsize=config.queue_size)
 
+    numa_assignments = build_numa_assignments(
+        config.threads_count, config.numa_aware
+    )
+
     for thread_num in range(0, config.threads_count):
+        numa_node_id, numa_cpus = numa_assignments[thread_num]
         builder = BuildNodeBuilder(
             config,
             thread_num,
             node_terminated,
             node_graceful_terminated,
             task_queue,
+            numa_cpus=numa_cpus,
+            numa_node_id=numa_node_id,
         )
         builders.append(builder)
+    for builder in builders:
+        builder.set_siblings(builders)
+    for builder in builders:
         builder.start()
 
     builder_supervisor = BuilderSupervisor(

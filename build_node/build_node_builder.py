@@ -43,6 +43,8 @@ class BuildNodeBuilder(BaseSlaveBuilder):
         terminated_event,
         graceful_terminated_event,
         task_queue: Queue,
+        numa_cpus=None,
+        numa_node_id=None,
     ):
         """
         Build thread initialization.
@@ -59,10 +61,19 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             Shows, if process got "kill -10" signal.
         task_queue: queue.Queue
             Shared queue with build tasks
+        numa_cpus : list of int, optional
+            CPU identifiers the thread (and the mock processes it spawns)
+            must be pinned to so that a build stays on a single NUMA node.
+        numa_node_id : int, optional
+            NUMA node identifier the thread is pinned to. Used for
+            cross-node load balancing when picking up tasks.
         """
         super().__init__(
             thread_num=thread_num,
+            numa_cpus=numa_cpus,
         )
+        self.__numa_node_id = numa_node_id
+        self.__siblings = ()
         self.__config = config
         # current task processing start timestamp
         self.__start_ts = None
@@ -93,6 +104,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
         self.__task_queue = task_queue
 
     def run(self):
+        self.apply_numa_affinity()
         log_file = os.path.join(
             self.__working_dir, 'bt-{0}.log'.format(self.name)
         )
@@ -296,6 +308,9 @@ class BuildNodeBuilder(BaseSlaveBuilder):
     def __request_task(self):
         if self.__task_queue.empty():
             return
+        if self.__should_yield_to_other_node():
+            self.__terminated_event.wait(0.5)
+            return
         task = self.__task_queue.get()
         return Task(**task)
 
@@ -427,3 +442,47 @@ class BuildNodeBuilder(BaseSlaveBuilder):
     @property
     def current_task_id(self):
         return self.__current_task_id
+
+    @property
+    def numa_node_id(self):
+        return self.__numa_node_id
+
+    def set_siblings(self, builders):
+        """
+        Provides references to peer builders for NUMA load balancing.
+
+        Must be called after all builders have been constructed and before
+        any of them is started. Stores every other builder so that
+        ``__should_yield_to_other_node`` can compare per-node active build
+        counts when this thread considers picking up a task.
+        """
+        self.__siblings = tuple(b for b in builders if b is not self)
+
+    def __should_yield_to_other_node(self):
+        """
+        Returns True when another NUMA node has strictly fewer active
+        builds than this builder's node.
+
+        Used to back off from grabbing a queued task when a peer on a less
+        loaded node should take it instead, keeping work distributed across
+        NUMA nodes rather than all funnelled to whichever thread happens to
+        win ``Queue.get()``.
+        """
+        if self.__numa_node_id is None or not self.__siblings:
+            return False
+        my_active = sum(
+            1 for b in self.__siblings
+            if b.numa_node_id == self.__numa_node_id
+            and b.current_task_id is not None
+        )
+        other_nodes = {
+            b.numa_node_id for b in self.__siblings
+        } - {self.__numa_node_id}
+        return any(
+            sum(
+                1 for b in self.__siblings
+                if b.numa_node_id == other
+                and b.current_task_id is not None
+            ) < my_active
+            for other in other_nodes
+        )
