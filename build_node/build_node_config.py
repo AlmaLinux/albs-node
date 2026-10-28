@@ -34,6 +34,7 @@ DEFAULT_EXCLUSIONS_URL = (
     'https://git.almalinux.org/almalinux/build-node-exclusions/raw/branch/main/'
 )
 DEFAULT_CACHE_SIZE = 1
+DEFAULT_NUMA_AWARE = True
 
 __all__ = ['BuildNodeConfig']
 
@@ -134,6 +135,7 @@ class BuildNodeConfig(BaseConfig):
             'exclusions_url': DEFAULT_EXCLUSIONS_URL,
             'build_node_name': self.get_node_name(),
             'cache_size': DEFAULT_CACHE_SIZE,
+            'numa_aware': DEFAULT_NUMA_AWARE,
         }
         schema = {
             'development_mode': {'type': 'boolean', 'default': False},
@@ -183,6 +185,7 @@ class BuildNodeConfig(BaseConfig):
             'exclusions_url': {'type': 'string', 'required': True},
             'build_node_name': {'type': 'string', 'required': True},
             'cache_size': {'type': 'integer', 'required': True},
+            'numa_aware': {'type': 'boolean', 'default': True},
         }
         super(BuildNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
