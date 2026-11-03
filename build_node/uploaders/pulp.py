@@ -13,13 +13,16 @@ from fsplit.filesplit import Filesplit
 from pulpcore.client.pulp_rpm import ApiClient as RpmApiClient
 from pulpcore.client.pulp_rpm import Configuration as RpmConfiguration
 from pulpcore.client.pulp_rpm import ContentPackagesApi, RpmPackageResponse
+from pulpcore.client.pulp_rpm.exceptions import ApiException as RpmApiException
 from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
 from pulpcore.client.pulpcore.api_client import ApiClient
 from pulpcore.client.pulpcore.configuration import Configuration
+from pulpcore.client.pulpcore.exceptions import ApiException
 
 from build_node.uploaders.base import BaseUploader, UploadError
+from build_node.uploaders.pulp_session import PulpSession
 
 __all__ = ['PulpBaseUploader', 'PulpRpmUploader']
 
@@ -61,7 +64,10 @@ class PulpBaseUploader(BaseUploader):
         max_workers: int
             Maximum number of parallel workers when uploading content.
         """
-        api_client = self._prepare_api_client(host, username, password)
+        self._session = PulpSession(
+            host, username, password, requests_timeout=requests_timeout
+        )
+        api_client = self._prepare_api_client(host)
         self._uploads_client = UploadsApi(api_client=api_client)
         self._tasks_client = TasksApi(api_client=api_client)
         self._artifacts_client = ArtifactsApi(api_client=api_client)
@@ -71,27 +77,23 @@ class PulpBaseUploader(BaseUploader):
         self._requests_timeout = requests_timeout
         self._logger = logging.getLogger(__file__)
 
-    @staticmethod
-    def _prepare_api_client(
-        host: str, username: str, password: str
-    ) -> ApiClient:
+    def _prepare_api_client(self, host: str) -> ApiClient:
         """
 
         Parameters
         ----------
         host : str
-        username : str
-        password : str
 
         Returns
         -------
         ApiClient
 
         """
-        api_configuration = Configuration(
-            host=host, username=username, password=password
+        # No username/password, otherwise the client sends Basic auth
+        api_configuration = Configuration(host=host)
+        return self._session.authenticate(
+            ApiClient(configuration=api_configuration)
         )
-        return ApiClient(configuration=api_configuration)
 
     def _wait_for_task_completion(self, task_href: str) -> dict:
         """
@@ -293,7 +295,17 @@ class PulpBaseUploader(BaseUploader):
 
         """
         file_sha256 = hash_file(filename, hash_type='sha256')
-        reference = self._upload_file(filename, file_sha256)
+        cookie = self._session.cookie
+        try:
+            reference = self._upload_file(filename, file_sha256)
+        except (ApiException, RpmApiException) as e:
+            if e.status not in (401, 403):
+                raise
+            # The session has expired (after 2 weeks by default),
+            # log in again and retry once. Parallel uploads share
+            # the session, so only the first of them logs in.
+            self._session.login(expired_cookie=cookie)
+            reference = self._upload_file(filename, file_sha256)
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
@@ -321,10 +333,8 @@ class PulpRpmUploader(PulpBaseUploader):
             max_workers,
             requests_timeout=requests_timeout,
         )
-        rpm_api_client = RpmApiClient(
-            configuration=RpmConfiguration(
-                host=host, username=username, password=password
-            )
+        rpm_api_client = self._session.authenticate(
+            RpmApiClient(configuration=RpmConfiguration(host=host))
         )
         self._packages_client = ContentPackagesApi(api_client=rpm_api_client)
 
