@@ -11,6 +11,7 @@ pyicu==2.14
 pyyaml==6.0.2
 filesplit==3.0.2
 pulpcore-client==3.67.0
+pulp-rpm-client==3.38.5
 pydantic==2.9.2
 python-rpm-spec==0.15.0
 grpcio==1.58.0

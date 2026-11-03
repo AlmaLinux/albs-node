@@ -10,6 +10,9 @@ from typing import List, Optional, Tuple
 from albs_build_lib.builder.models import Artifact
 from albs_common_lib.utils.file_utils import hash_file
 from fsplit.filesplit import Filesplit
+from pulpcore.client.pulp_rpm import ApiClient as RpmApiClient
+from pulpcore.client.pulp_rpm import Configuration as RpmConfiguration
+from pulpcore.client.pulp_rpm import ContentPackagesApi, RpmPackageResponse
 from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
@@ -213,6 +216,28 @@ class PulpBaseUploader(BaseUploader):
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
 
+    def _upload_file(self, file_path: str, file_sha256: str) -> str:
+        """
+        Uploads a file unless Pulp already has it.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the file.
+        file_sha256 : str
+            Pre-computed SHA256 of the file.
+
+        Returns
+        -------
+        str
+            Reference to the Pulp resource.
+
+        """
+        reference = self.check_if_artifact_exists(file_sha256)
+        if not reference:
+            reference = self._send_file(file_path)
+        return reference
+
     def check_if_artifact_exists(self, sha256: str) -> Optional[str]:
         response = self._artifacts_client.list(
             sha256=sha256, _request_timeout=self._requests_timeout
@@ -268,9 +293,7 @@ class PulpBaseUploader(BaseUploader):
 
         """
         file_sha256 = hash_file(filename, hash_type='sha256')
-        reference = self.check_if_artifact_exists(file_sha256)
-        if not reference:
-            reference = self._send_file(filename)
+        reference = self._upload_file(filename, file_sha256)
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
@@ -281,6 +304,94 @@ class PulpBaseUploader(BaseUploader):
 
 
 class PulpRpmUploader(PulpBaseUploader):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        chunk_size: int,
+        max_workers: int,
+        requests_timeout: int = DEFAULT_TIMEOUT,
+    ):
+        super().__init__(
+            host,
+            username,
+            password,
+            chunk_size,
+            max_workers,
+            requests_timeout=requests_timeout,
+        )
+        rpm_api_client = RpmApiClient(
+            configuration=RpmConfiguration(
+                host=host, username=username, password=password
+            )
+        )
+        self._packages_client = ContentPackagesApi(api_client=rpm_api_client)
+
+    def _send_rpm(self, file_path: str, file_sha256: str) -> str:
+        """
+        Creates RPM content with the synchronous upload endpoint, so no
+        Pulp tasks have to be queued and polled.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the RPM file.
+        file_sha256 : str
+            Pre-computed SHA256 of the file.
+
+        Returns
+        -------
+        str
+            Reference to the RPM package.
+
+        """
+        if os.path.getsize(file_path) > self._chunk_size:
+            package = self._post_rpm_chunked(file_path)
+        else:
+            package = self._packages_client.upload(
+                file=file_path, _request_timeout=self._requests_timeout
+            )
+
+        if package.sha256 != file_sha256:
+            raise UploadError(
+                f'{file_path} checksum mismatch: expected {file_sha256}, '
+                f'Pulp has {package.sha256}'
+            )
+        return package.pulp_href
+
+    def _post_rpm_chunked(self, file_path: str) -> RpmPackageResponse:
+        """
+        Uploads a large RPM in chunks and creates the package from
+        the resulting upload.
+
+        Parameters
+        ----------
+        file_path: str
+            Path to the RPM file
+        """
+        upload_href, _ = self._create_upload(file_path)
+        try:
+            self._put_large_file(file_path, upload_href)
+            return self._packages_client.upload(
+                upload=upload_href, _request_timeout=self._requests_timeout
+            )
+        finally:
+            # Unlike the commit task, the synchronous endpoint keeps
+            # the upload and its chunks, so remove them ourselves
+            try:
+                self._uploads_client.delete(
+                    upload_href, _request_timeout=self._requests_timeout
+                )
+            except Exception as e:
+                self._logger.warning(
+                    'Cannot delete upload %s: %s', upload_href, e
+                )
+
+    def _upload_file(self, file_path: str, file_sha256: str) -> str:
+        if not file_path.endswith('.rpm'):
+            return super()._upload_file(file_path, file_sha256)
+        return self._send_rpm(file_path, file_sha256)
 
     def get_artifacts_list(
         self, artifacts_dir: str, only_logs: bool = False
