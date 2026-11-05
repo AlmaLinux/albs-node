@@ -112,14 +112,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
         )
         self.__logger = self.init_thread_logger(log_file)
         if self._codenotary_enabled:
-            self._immudb_wrapper = ImmudbWrapper(
-                username=self.__config.immudb_username,
-                password=self.__config.immudb_password,
-                database=self.__config.immudb_database,
-                immudb_address=self.__config.immudb_address,
-                public_key_file=self.__config.immudb_public_key_file,
-                logger=self.__logger,
-            )
+            self._immudb_wrapper = self.__new_immudb_client()
         self.__logger.info('starting %s', self.name)
         self.__generate_request_session()
         while not self.__graceful_terminated_event.is_set():
@@ -262,6 +255,16 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                 self.__builder = None
                 self.__task_queue.task_done()
 
+    def __new_immudb_client(self) -> ImmudbWrapper:
+        return ImmudbWrapper(
+            username=self.__config.immudb_username,
+            password=self.__config.immudb_password,
+            database=self.__config.immudb_database,
+            immudb_address=self.__config.immudb_address,
+            public_key_file=self.__config.immudb_public_key_file,
+            logger=self.__logger,
+        )
+
     @measure_stage("cas_notarize_artifacts")
     def __cas_notarize_artifacts(
         self,
@@ -271,9 +274,10 @@ class BuildNodeBuilder(BaseSlaveBuilder):
         return notarize_build_artifacts(
             task=task,
             artifacts_dir=artifacts_dir,
-            immudb_client=self._immudb_wrapper,
+            immudb_client_factory=self.__new_immudb_client,
             build_host=self.__hostname,
             logger=self.__logger,
+            max_workers=self.__config.notarization_workers,
         )
 
     def __build_packages(self, task, task_dir, artifacts_dir):

@@ -1,7 +1,9 @@
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from albs_build_lib.builder.models import Task
 from albs_common_lib.utils.file_utils import (
@@ -16,9 +18,10 @@ from immudb_wrapper import ImmudbWrapper
 def notarize_build_artifacts(
     task: Task,
     artifacts_dir: str,
-    immudb_client: ImmudbWrapper,
+    immudb_client_factory: Callable[[], ImmudbWrapper],
     build_host: str,
     logger: Optional[Logger] = None,
+    max_workers: int = 1,
 ) -> Tuple[Dict[str, str], List[str]]:
 
     srpm_path = None
@@ -88,22 +91,38 @@ def notarize_build_artifacts(
         'sourcerpm',
     )
 
+    # An immudb client keeps per-connection state (auth stub, last
+    # verified server state), so every thread gets its own one
+    local = threading.local()
+
+    def notarize_artifact(artifact: str, user_metadata: Dict) -> Dict:
+        if not hasattr(local, 'client'):
+            local.client = immudb_client_factory()
+        return local.client.notarize_file(
+            artifact, user_metadata=user_metadata
+        )
+
     while non_notarized_artifacts and max_notarize_retries:
         non_notarized_artifacts = []
+        # rpm headers are read here as librpm is not thread-safe
+        user_metadata = []
         for artifact in to_notarize:
-            result = {}
             artifact_metadata = {}
             if artifact.endswith('.rpm'):
                 artifact_metadata = cas_metadata.copy()
                 rpm_header = get_rpm_metadata(artifact)
                 for field in rpm_header_fields:
                     artifact_metadata[field] = rpm_header[field]
-            result = immudb_client.notarize_file(
-                artifact,
-                user_metadata=(
-                    artifact_metadata if artifact_metadata else cas_metadata
-                ),
+            user_metadata.append(
+                artifact_metadata if artifact_metadata else cas_metadata
             )
+        # Every notarization is a handful of round trips to immudb,
+        # run them in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(
+                executor.map(notarize_artifact, to_notarize, user_metadata)
+            )
+        for artifact, result in zip(to_notarize, results):
             notarized = result.get('verified', False)
             cas_hash = result.get('value', {}).get('Hash')
 
