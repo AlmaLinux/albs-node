@@ -279,6 +279,19 @@ class BaseRPMBuilder(BaseBuilder):
                         sources_dir,
                         downloaded_sources_dir=src_suffix_dir,
                     )
+            elif self.task.built_srpm_url and self.task.arch != 'src':
+                # The src-RPM was built by an earlier task of this build,
+                # and mock --rebuild unpacks it into the chroot itself
+                srpm_path = download_file(
+                    self.task.built_srpm_url, self.task_dir, timeout=900
+                )
+                excluded, reason = self.is_build_excluded(srpm_path)
+                if excluded:
+                    raise BuildExcluded(reason)
+                self.build_binaries(
+                    srpm_path, self.task.platform.data.get('definitions')
+                )
+                return
             else:
                 source_srpm_dir = self.unpack_sources()
                 spec_file = self.locate_spec_file(source_srpm_dir)
@@ -379,6 +392,9 @@ class BaseRPMBuilder(BaseBuilder):
                 )
             except MockError as e:
                 rpm_build_result = e
+                excluded, reason = self.is_srpm_build_excluded(e)
+                if excluded:
+                    raise BuildExcluded(reason)
                 raise BuildError(f'RPM build failed: {str(e)}')
             finally:
                 if rpm_build_result:
