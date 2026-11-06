@@ -114,6 +114,16 @@ class PulpSession:
             self._apply(api_client)
         return api_client
 
+    def reset_connections(self):
+        """
+        Closes the pooled connections of every client. An idle connection
+        is dropped silently on the way to Pulp and the next request on it
+        only times out, so the uploads of a task start on fresh ones.
+        """
+        with self._lock:
+            for api_client in self._api_clients:
+                api_client.rest_client.pool_manager.clear()
+
     def _apply(self, api_client):
         api_client.cookie = self._cookie
         # Django requires the CSRF token for unsafe methods with a session,
