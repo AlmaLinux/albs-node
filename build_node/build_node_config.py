@@ -27,7 +27,8 @@ DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
 DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
-DEFAULT_PULP_TIMEOUT = 120  # 2 minutes
+DEFAULT_PULP_TIMEOUT = 60  # seconds
+DEFAULT_PULP_UPLOAD_RETRIES = 3
 DEFAULT_JWT_TOKEN = 'test_jwt'
 DEFAULT_CACHE_UPDATE_INTERVAL = 600
 DEFAULT_EXCLUSIONS_URL = (
@@ -80,6 +81,11 @@ class BuildNodeConfig(BaseConfig):
         Size of file chunk to upload through Pulp.
     pulp_uploader_max_workers : int
         Maximum number of parallel workers when uploading content to Pulp.
+    pulp_timeout : int
+        Timeout of every request to Pulp, in seconds.
+    pulp_upload_retries : int
+        How many times a file upload is started over after a connection
+        error, a timeout or a server error.
     """
 
     def __init__(self, config_file=None, **cmd_args):
@@ -121,6 +127,7 @@ class BuildNodeConfig(BaseConfig):
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
             'pulp_uploader_max_workers': DEFAULT_PULP_UPLOADER_MAX_WORKERS,
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
+            'pulp_upload_retries': DEFAULT_PULP_UPLOAD_RETRIES,
             'mock_basedir': DEFAULT_MOCK_BASEDIR,
             'base_arch': platform.machine(),
             'build_src': True,
@@ -177,9 +184,10 @@ class BuildNodeConfig(BaseConfig):
             'build_src': {'type': 'boolean', 'nullable': False},
             'pulp_timeout': {
                 'type': 'integer',
-                'min': DEFAULT_PULP_TIMEOUT,
+                'min': 1,
                 'required': True,
             },
+            'pulp_upload_retries': {'type': 'integer', 'min': 0},
             'request_timeout': {'type': 'integer', 'required': True},
             'cache_update_interval': {'type': 'integer', 'required': True},
             'exclusions_url': {'type': 'string', 'required': True},
