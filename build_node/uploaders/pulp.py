@@ -20,6 +20,8 @@ from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
 from pulpcore.client.pulpcore.api_client import ApiClient
 from pulpcore.client.pulpcore.configuration import Configuration
 from pulpcore.client.pulpcore.exceptions import ApiException
+from urllib3.exceptions import HTTPError
+from urllib3.util.retry import Retry
 
 from build_node.uploaders.base import BaseUploader, UploadError
 from build_node.uploaders.pulp_session import PulpSession
@@ -31,7 +33,14 @@ class TaskFailedError(Exception):
     pass
 
 
-DEFAULT_TIMEOUT = 120  # 2 minutes per request
+DEFAULT_TIMEOUT = 60  # seconds per request
+DEFAULT_UPLOAD_RETRIES = 3
+UPLOAD_RETRY_DELAY = 10  # seconds, multiplied by the attempt number
+# No transport retries: urllib3 would re-send a PUT chunk after a read
+# timeout, and Pulp appends it a second time; a failed file is started
+# over in upload_single_file() instead. A Retry instance rather than
+# False, which urllib3 converts (and logs) on every request.
+NO_RETRIES = Retry(total=False, redirect=0)
 
 
 class PulpBaseUploader(BaseUploader):
@@ -47,6 +56,7 @@ class PulpBaseUploader(BaseUploader):
         chunk_size: int,
         max_workers: int,
         requests_timeout: int = DEFAULT_TIMEOUT,
+        upload_retries: int = DEFAULT_UPLOAD_RETRIES,
     ):
         """
         Initiate uploader.
@@ -63,6 +73,11 @@ class PulpBaseUploader(BaseUploader):
             Size of chunk to split files during the upload.
         max_workers: int
             Maximum number of parallel workers when uploading content.
+        requests_timeout : int
+            Timeout of every request to Pulp, in seconds.
+        upload_retries : int
+            How many times a file upload is started over after a
+            connection error, a timeout or a server error.
         """
         self._session = PulpSession(
             host, username, password, requests_timeout=requests_timeout
@@ -75,6 +90,7 @@ class PulpBaseUploader(BaseUploader):
         self._chunk_size = chunk_size
         self._max_workers = max_workers
         self._requests_timeout = requests_timeout
+        self._upload_retries = upload_retries
         self._logger = logging.getLogger(__file__)
 
     def _prepare_api_client(self, host: str) -> ApiClient:
@@ -90,7 +106,7 @@ class PulpBaseUploader(BaseUploader):
 
         """
         # No username/password, otherwise the client sends Basic auth
-        api_configuration = Configuration(host=host)
+        api_configuration = Configuration(host=host, retries=NO_RETRIES)
         return self._session.authenticate(
             ApiClient(configuration=api_configuration)
         )
@@ -108,7 +124,9 @@ class PulpBaseUploader(BaseUploader):
             Task final state
 
         """
-        result = self._tasks_client.read(task_href)
+        result = self._tasks_client.read(
+            task_href, _request_timeout=self._requests_timeout
+        )
         while result.state not in ('failed', 'completed'):
             time.sleep(5)
             result = self._tasks_client.read(
@@ -295,17 +313,41 @@ class PulpBaseUploader(BaseUploader):
 
         """
         file_sha256 = hash_file(filename, hash_type='sha256')
-        cookie = self._session.cookie
-        try:
-            reference = self._upload_file(filename, file_sha256)
-        except (ApiException, RpmApiException) as e:
-            if e.status not in (401, 403):
-                raise
-            # The session has expired (after 2 weeks by default),
-            # log in again and retry once. Parallel uploads share
-            # the session, so only the first of them logs in.
-            self._session.login(expired_cookie=cookie)
-            reference = self._upload_file(filename, file_sha256)
+        for attempt in range(1, self._upload_retries + 2):
+            cookie = self._session.cookie
+            try:
+                reference = self._upload_file(filename, file_sha256)
+                break
+            except (ApiException, RpmApiException) as e:
+                if e.status in (401, 403):
+                    # The session has expired (after 2 weeks by default),
+                    # log in again and retry once. Parallel uploads share
+                    # the session, so only the first of them logs in.
+                    self._session.login(expired_cookie=cookie)
+                    reference = self._upload_file(filename, file_sha256)
+                    break
+                # Status 0 is an SSL error from the client
+                if 0 < e.status < 500 or attempt > self._upload_retries:
+                    raise
+                error = e
+            except HTTPError as e:
+                # urllib3: no connection, timeout, connection reset
+                if attempt > self._upload_retries:
+                    raise
+                error = e
+            # Start the file over: Pulp returns what the earlier attempt
+            # managed to create (artifacts are looked up by checksum,
+            # packages by pkgId), so nothing is uploaded twice
+            delay = UPLOAD_RETRY_DELAY * attempt
+            self._logger.warning(
+                'Cannot upload %s (attempt %d of %d), retrying in %d s: %s',
+                filename,
+                attempt,
+                self._upload_retries + 1,
+                delay,
+                error,
+            )
+            time.sleep(delay)
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
@@ -324,6 +366,7 @@ class PulpRpmUploader(PulpBaseUploader):
         chunk_size: int,
         max_workers: int,
         requests_timeout: int = DEFAULT_TIMEOUT,
+        upload_retries: int = DEFAULT_UPLOAD_RETRIES,
     ):
         super().__init__(
             host,
@@ -332,9 +375,12 @@ class PulpRpmUploader(PulpBaseUploader):
             chunk_size,
             max_workers,
             requests_timeout=requests_timeout,
+            upload_retries=upload_retries,
         )
         rpm_api_client = self._session.authenticate(
-            RpmApiClient(configuration=RpmConfiguration(host=host))
+            RpmApiClient(
+                configuration=RpmConfiguration(host=host, retries=NO_RETRIES)
+            )
         )
         self._packages_client = ContentPackagesApi(api_client=rpm_api_client)
 

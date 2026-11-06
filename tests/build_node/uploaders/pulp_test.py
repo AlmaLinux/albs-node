@@ -7,6 +7,7 @@ from albs_common_lib.utils.file_utils import hash_file
 from pulpcore.client.pulp_rpm.exceptions import ApiException as RpmApiException
 from pulpcore.client.pulpcore.exceptions import ApiException
 from pyfakefs.fake_filesystem_unittest import TestCase
+from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
 from build_node.uploaders.base import UploadError
 from build_node.uploaders.pulp import PulpRpmUploader
@@ -17,7 +18,8 @@ class TestPulpRpmUploader(TestCase):
     def setUp(self):
         self.setUpPyfakefs()
         session_patcher = patch('build_node.uploaders.pulp.PulpSession')
-        self.session = session_patcher.start().return_value
+        self.session_class = session_patcher.start()
+        self.session = self.session_class.return_value
         self.addCleanup(session_patcher.stop)
         # authenticate() must return the client it was given
         self.session.authenticate.side_effect = lambda client: client
@@ -113,7 +115,7 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def read(self, task_href):
+            def read(self, task_href, **__):
                 assert task_href == self.TASK_HREF
                 result = Mock()
                 result.created_resources = [f_href]
@@ -377,12 +379,76 @@ class TestPulpRpmUploader(TestCase):
         with patch.object(
             PulpRpmUploader,
             '_upload_file',
-            side_effect=ApiException(status=500),
+            side_effect=ApiException(status=400),
         ) as upload_file:
             with self.assertRaises(ApiException):
                 uploader.upload_single_file('/build_dir/package.rpm')
         upload_file.assert_called_once()
         self.session.login.assert_not_called()
+
+    @patch('build_node.uploaders.pulp.time.sleep')
+    def test_upload_retries_transient_errors(self, sleep):
+        uploader = PulpRpmUploader(
+            'localhost', 'user', 'password', 42, 1, upload_retries=3
+        )
+        with patch.object(
+            PulpRpmUploader,
+            '_upload_file',
+            side_effect=[
+                ReadTimeoutError(None, '/pulp', 'Read timed out'),
+                ProtocolError('Connection reset by peer'),
+                RpmApiException(status=503),
+                'href',
+            ],
+        ) as upload_file:
+            artifact = uploader.upload_single_file('/build_dir/package.rpm')
+        assert artifact.href == 'href'
+        assert upload_file.call_count == 4
+        # The delay grows with every attempt
+        assert [c.args[0] for c in sleep.call_args_list] == [10, 20, 30]
+        self.session.login.assert_not_called()
+
+    @patch('build_node.uploaders.pulp.time.sleep')
+    def test_upload_gives_up_after_retries(self, sleep):
+        uploader = PulpRpmUploader(
+            'localhost', 'user', 'password', 42, 1, upload_retries=2
+        )
+        with patch.object(
+            PulpRpmUploader,
+            '_upload_file',
+            side_effect=ApiException(status=502),
+        ) as upload_file:
+            with self.assertRaises(ApiException):
+                uploader.upload_single_file('/build_dir/package.rpm')
+        assert upload_file.call_count == 3
+        assert sleep.call_count == 2
+
+    def test_requests_have_a_timeout(self):
+        with (
+            patch('build_node.uploaders.pulp.UploadsApi') as uploads,
+            patch('build_node.uploaders.pulp.TasksApi') as tasks,
+            patch('build_node.uploaders.pulp.ArtifactsApi') as artifacts,
+            patch('build_node.uploaders.pulp.ContentPackagesApi') as packages,
+        ):
+            uploader = PulpRpmUploader(
+                'localhost', 'user', 'password', 42, 1, requests_timeout=7
+            )
+            artifacts().list.return_value.results = []
+            tasks().read.return_value.state = 'completed'
+            uploader._upload_file('/build_dir/build.log', 'sha256')
+            uploader._post_rpm_chunked('/build_dir/package.rpm')
+        calls = [
+            call
+            for client in (uploads, tasks, artifacts, packages)
+            for call in client().method_calls
+        ]
+        # list, create, update, commit, read, create, update, upload, delete
+        assert len(calls) == 9
+        for call in calls:
+            assert call.kwargs['_request_timeout'] == 7, call
+        self.session_class.assert_called_once_with(
+            'localhost', 'user', 'password', requests_timeout=7
+        )
 
     def test_upload_relogins_only_once(self):
         uploader = PulpRpmUploader('localhost', 'user', 'password', 42, 1)
@@ -406,3 +472,6 @@ class TestPulpRpmUploader(TestCase):
             # No credentials, so the SDK sends no Basic auth
             assert client.configuration.username is None
             assert client.configuration.password is None
+            # Failed files are started over, urllib3 must not re-send
+            # single requests (a repeated PUT duplicates a chunk)
+            assert client.configuration.retries.total is False
