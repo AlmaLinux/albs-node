@@ -88,6 +88,47 @@ class TestPulpRpmUploader(TestCase):
         f_size = os.path.getsize(f_path)
         f_href = self.file_map[f_hash].href
 
+        class ArtifactsApi:
+            def __init__(*_, **__):
+                pass
+
+            def create(_, file, sha256, size, **__):
+                assert file == f_path
+                assert sha256 == f_hash
+                assert size == f_size
+                response = Mock()
+                response.pulp_href = f_href
+                return response
+
+        class UploadsApi:
+            def __init__(*_, **__):
+                pass
+
+            def create(_, opts, **__):
+                raise AssertionError('A small file must not use an upload')
+
+        with (
+            patch('build_node.uploaders.pulp.ArtifactsApi', new=ArtifactsApi),
+            patch('build_node.uploaders.pulp.UploadsApi', new=UploadsApi),
+        ):
+            uploader = PulpRpmUploader('localhost', 'user', 'password', f_size, 1)
+            artifact_href = uploader._send_file(f_path, f_hash)
+            assert artifact_href == f_href
+
+    def test_send_file_chunked(self):
+        f_path = '/build_dir/package.rpm'
+        f_hash = hash_file(f_path, hash_type="sha256")
+        f_size = os.path.getsize(f_path)
+        f_href = self.file_map[f_hash].href
+        updated_chunks = []
+
+        class ArtifactsApi:
+            def __init__(*_, **__):
+                pass
+
+            def create(_, **__):
+                raise AssertionError('A large file must be sent in parts')
+
         class UploadsApi:
             def __init__(*_, **__):
                 pass
@@ -100,7 +141,7 @@ class TestPulpRpmUploader(TestCase):
 
             def update(_, content_range, upload_href, file, **__):
                 assert upload_href == f_href
-                assert file == f_path
+                updated_chunks.append(content_range)
 
             def commit(_, upload_href, upload_commit, **__):
                 assert upload_href == f_href
@@ -123,15 +164,16 @@ class TestPulpRpmUploader(TestCase):
                 return result
 
         with (
+            patch('build_node.uploaders.pulp.ArtifactsApi', new=ArtifactsApi),
             patch('build_node.uploaders.pulp.UploadsApi', new=UploadsApi),
             patch('build_node.uploaders.pulp.TasksApi', new=TasksApi),
-            patch.object(
-                PulpRpmUploader, 'check_if_artifact_exists', return_value=None
-            ),
         ):
-            uploader = PulpRpmUploader('localhost', 'user', 'password', f_size, 1)
-            artifact_href = uploader._send_file(f_path)
+            uploader = PulpRpmUploader(
+                'localhost', 'user', 'password', f_size - 1, 1
+            )
+            artifact_href = uploader._send_file(f_path, f_hash)
             assert artifact_href == f_href
+            assert len(updated_chunks) == 2
 
     def test_send_rpm(self):
         f_path = '/build_dir/package.rpm'
@@ -431,7 +473,7 @@ class TestPulpRpmUploader(TestCase):
             patch('build_node.uploaders.pulp.ContentPackagesApi') as packages,
         ):
             uploader = PulpRpmUploader(
-                'localhost', 'user', 'password', 42, 1, requests_timeout=7
+                'localhost', 'user', 'password', 1 << 20, 1, requests_timeout=7
             )
             artifacts().list.return_value.results = []
             tasks().read.return_value.state = 'completed'
@@ -442,8 +484,8 @@ class TestPulpRpmUploader(TestCase):
             for client in (uploads, tasks, artifacts, packages)
             for call in client().method_calls
         ]
-        # list, create, update, commit, read, create, update, upload, delete
-        assert len(calls) == 9
+        # list, create (artifact), create (upload), update, upload, delete
+        assert len(calls) == 6
         for call in calls:
             assert call.kwargs['_request_timeout'] == 7, call
         self.session_class.assert_called_once_with(
