@@ -58,6 +58,7 @@ class TestBuildNodeConfig(TestCase):
             'immudb_database': None,
             'immudb_address': None,
             'immudb_public_key_file': None,
+            'notarization_workers': 8,
             'request_timeout': 60,
         }
         for key, value in defaults.items():

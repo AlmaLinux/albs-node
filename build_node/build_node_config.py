@@ -29,6 +29,7 @@ DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 60  # seconds
 DEFAULT_PULP_UPLOAD_RETRIES = 3
+DEFAULT_NOTARIZATION_WORKERS = 8
 DEFAULT_JWT_TOKEN = 'test_jwt'
 DEFAULT_CACHE_UPDATE_INTERVAL = 600
 DEFAULT_EXCLUSIONS_URL = (
@@ -86,6 +87,10 @@ class BuildNodeConfig(BaseConfig):
     pulp_upload_retries : int
         How many times a file upload is started over after a connection
         error, a timeout or a server error.
+    notarization_workers : int
+        Number of threads notarizing build artifacts in immudb. Each
+        notarization is a few network round trips, so this is bound by
+        latency to immudb, not by CPU.
     """
 
     def __init__(self, config_file=None, **cmd_args):
@@ -136,6 +141,7 @@ class BuildNodeConfig(BaseConfig):
             'immudb_database': None,
             'immudb_address': None,
             'immudb_public_key_file': None,
+            'notarization_workers': DEFAULT_NOTARIZATION_WORKERS,
             'request_timeout': DEFAULT_REQUEST_TIMEOUT,
             'jwt_token': DEFAULT_JWT_TOKEN,
             'cache_update_interval': DEFAULT_CACHE_UPDATE_INTERVAL,
@@ -180,6 +186,7 @@ class BuildNodeConfig(BaseConfig):
             'immudb_database': {'type': 'string', 'nullable': True},
             'immudb_address': {'type': 'string', 'nullable': True},
             'immudb_public_key_file': {'type': 'string', 'nullable': True},
+            'notarization_workers': {'type': 'integer', 'min': 1},
             'base_arch': {'type': 'string', 'nullable': False},
             'build_src': {'type': 'boolean', 'nullable': False},
             'pulp_timeout': {
