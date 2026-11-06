@@ -111,6 +111,12 @@ class PulpBaseUploader(BaseUploader):
             ApiClient(configuration=api_configuration)
         )
 
+    def reset_connections(self):
+        """
+        Closes the pooled connections, see PulpSession.reset_connections().
+        """
+        self._session.reset_connections()
+
     def _wait_for_task_completion(self, task_href: str) -> dict:
         """
 
