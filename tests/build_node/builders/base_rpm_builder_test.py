@@ -415,6 +415,46 @@ class TestIsSrpmBuildRequired(TestCase):
         """
         self.assertTrue(build_task.is_srpm_build_required())
 
+
+class TestBuildFromBuiltSrpm(TestCase):
+    """BaseRPMBuilder.build with a src-RPM built by an earlier task"""
+
+    @pytest.fixture(autouse=True)
+    def set_task(self, build_task):
+        self.task = build_task.model_copy(
+            update={'built_srpm_url': 'https://example.com/test.src.rpm'}
+        )
+
+    @patch.object(BaseRPMBuilder, 'build_binaries')
+    @patch.object(BaseRPMBuilder, 'build_srpm')
+    @patch.object(BaseRPMBuilder, 'is_build_excluded', return_value=(0, ''))
+    @patch(
+        'build_node.builders.base_rpm_builder.download_file',
+        return_value='/test/task_dir/test.src.rpm',
+    )
+    def test_no_repack(
+        self, download_file, is_build_excluded, build_srpm, build_binaries
+    ):
+        """BaseRPMBuilder.build rebuilds the downloaded src-RPM as is"""
+        builder = BaseRPMBuilder(
+            Mock(codenotary_enabled=False),
+            logging.getLogger('BaseRPMBuilderLogger'),
+            self.task,
+            '/test/task_dir',
+            '/test/artifacts',
+            None,
+        )
+        builder.build()
+        download_file.assert_called_once_with(
+            self.task.built_srpm_url, '/test/task_dir', timeout=900
+        )
+        is_build_excluded.assert_called_once_with('/test/task_dir/test.src.rpm')
+        build_srpm.assert_not_called()
+        build_binaries.assert_called_once_with(
+            '/test/task_dir/test.src.rpm', None
+        )
+
+
 @pytest.mark.skip(reason="We need to rewrite it to pytest")
 class TestUnpackSources(TestCase):
     """BaseRPMBuilder.unpack_sources unit tests"""
