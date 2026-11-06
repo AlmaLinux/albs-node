@@ -58,7 +58,7 @@ from .. import build_node_globals as node_globals
 # 'r' modifier and the number of slashes is intentional, modify very carefully
 # or don't touch this at all
 MODSIGN_CONTENT = r"""
-%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print0 | xargs -0 -r -I{} /usr/local/bin/modsign %{modsign_os} {} }
+%__brp_kmod_sign %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko' -print0 | xargs -0 -r -I{} /usr/bin/rpm-sign --key %{modsign_os} --lkmsign {} --output {} }
 %__brp_kmod_post_sign_process %{expand:[ ! -d "$RPM_BUILD_ROOT/lib/modules/" ] || find "$RPM_BUILD_ROOT/lib/modules/" -type f -name '*.ko.*' -delete}
 %__spec_install_post \\
         %{?__debug_package:%{__debug_install_post}} \\
