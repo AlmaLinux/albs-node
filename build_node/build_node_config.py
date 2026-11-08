@@ -36,7 +36,7 @@ DEFAULT_EXCLUSIONS_URL = (
     'https://git.almalinux.org/almalinux/build-node-exclusions/raw/branch/main/'
 )
 DEFAULT_CACHE_SIZE = 1
-DEFAULT_NUMA_AWARE = True
+DEFAULT_NUMA_AWARE = False
 
 __all__ = ['BuildNodeConfig']
 
@@ -91,6 +91,11 @@ class BuildNodeConfig(BaseConfig):
         Number of threads notarizing build artifacts in immudb. Each
         notarization is a few network round trips, so this is bound by
         latency to immudb, not by CPU.
+    numa_aware : bool
+        Pin each build thread (and the mock processes it spawns) to a single
+        NUMA node. Disabled by default: on x86_64 and ppc64le hosts builds
+        perform fine spanning all nodes, so enable it only where cross-node
+        traffic hurts, which so far is aarch64 only.
     """
 
     def __init__(self, config_file=None, **cmd_args):
@@ -200,7 +205,7 @@ class BuildNodeConfig(BaseConfig):
             'exclusions_url': {'type': 'string', 'required': True},
             'build_node_name': {'type': 'string', 'required': True},
             'cache_size': {'type': 'integer', 'required': True},
-            'numa_aware': {'type': 'boolean', 'default': True},
+            'numa_aware': {'type': 'boolean', 'default': DEFAULT_NUMA_AWARE},
         }
         super(BuildNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
