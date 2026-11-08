@@ -49,6 +49,13 @@ class TestPulpSession(TestCase):
             PulpSession('http://pulp', 'user', 'wrong')
         self.login.return_value.release_conn.assert_called_once()
 
+    def test_reset_connections_clears_every_pool(self):
+        session = PulpSession('http://pulp', 'user', 'password')
+        clients = [session.authenticate(Mock()) for _ in range(2)]
+        session.reset_connections()
+        for client in clients:
+            client.rest_client.pool_manager.clear.assert_called_once_with()
+
     def test_relogin_updates_every_client(self):
         session = PulpSession('http://pulp', 'user', 'password')
         clients = [session.authenticate(Mock()) for _ in range(2)]

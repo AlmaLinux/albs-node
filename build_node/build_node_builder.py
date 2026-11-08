@@ -192,6 +192,8 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                             pprint.pformat(non_notarized_artifacts),
                         )
                 build_artifacts = []
+                # The connections have been idle since the previous task
+                self._pulp_uploader.reset_connections()
                 try:
                     build_artifacts = self.__upload_artifacts(
                         artifacts_dir, only_logs=only_logs
