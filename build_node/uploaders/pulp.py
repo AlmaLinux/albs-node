@@ -164,15 +164,15 @@ class PulpBaseUploader(BaseUploader):
         )
         return response.pulp_href, file_size
 
-    def _commit_upload(self, file_path: str, reference: str) -> str:
+    def _commit_upload(self, file_sha256: str, reference: str) -> str:
         """
         Commits upload and waits until upload will be transformed to artifact.
         Returns artifact reference upon completion.
 
         Parameters
         ----------
-        file_path : str
-            Path to the file.
+        file_sha256 : str
+            SHA256 of the file.
         reference : str
             Upload reference in Pulp.
 
@@ -182,7 +182,6 @@ class PulpBaseUploader(BaseUploader):
             Reference to the created resource.
 
         """
-        file_sha256 = hash_file(file_path, hash_type='sha256')
         response = self._uploads_client.commit(
             reference,
             {'sha256': file_sha256},
@@ -224,23 +223,25 @@ class PulpBaseUploader(BaseUploader):
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
-    def _send_file(self, file_path: str):
-        reference, file_size = self._create_upload(file_path)
+    def _send_file(self, file_path: str, file_sha256: str) -> str:
+        file_size = os.path.getsize(file_path)
         if file_size > self._chunk_size:
             self._logger.debug(
                 'File size exceeded %d, sending file in parts',
                 self._chunk_size,
             )
+            reference, _ = self._create_upload(file_path)
             self._put_large_file(file_path, reference)
-        else:
-            self._uploads_client.update(
-                f'bytes 0-{file_size - 1}/{file_size}',
-                reference,
-                file_path,
-                _request_timeout=self._requests_timeout,
-            )
-        artifact_href = self._commit_upload(file_path, reference)
-        return artifact_href
+            return self._commit_upload(file_sha256, reference)
+        # One request creates the artifact, no upload object to commit
+        # and no task to poll
+        response = self._artifacts_client.create(
+            file=file_path,
+            sha256=file_sha256,
+            size=file_size,
+            _request_timeout=self._requests_timeout,
+        )
+        return response.pulp_href
 
     def _upload_file(self, file_path: str, file_sha256: str) -> str:
         """
@@ -261,7 +262,7 @@ class PulpBaseUploader(BaseUploader):
         """
         reference = self.check_if_artifact_exists(file_sha256)
         if not reference:
-            reference = self._send_file(file_path)
+            reference = self._send_file(file_path, file_sha256)
         return reference
 
     def check_if_artifact_exists(self, sha256: str) -> Optional[str]:
