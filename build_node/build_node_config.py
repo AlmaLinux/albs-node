@@ -25,6 +25,7 @@ DEFAULT_PULP_USER = 'pulp'
 DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
+DEFAULT_PULP_CHUNK_WORKERS = 4
 DEFAULT_MOCK_BASEDIR = None
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 60  # seconds
@@ -82,6 +83,8 @@ class BuildNodeConfig(BaseConfig):
         Size of file chunk to upload through Pulp.
     pulp_uploader_max_workers : int
         Maximum number of parallel workers when uploading content to Pulp.
+    pulp_chunk_workers : int
+        Maximum number of chunks of one large file uploaded in parallel.
     pulp_timeout : int
         Timeout of every request to Pulp, in seconds.
     pulp_upload_retries : int
@@ -136,6 +139,7 @@ class BuildNodeConfig(BaseConfig):
             'pulp_password': DEFAULT_PULP_PASSWORD,
             'pulp_chunk_size': DEFAULT_PULP_CHUNK_SIZE,
             'pulp_uploader_max_workers': DEFAULT_PULP_UPLOADER_MAX_WORKERS,
+            'pulp_chunk_workers': DEFAULT_PULP_CHUNK_WORKERS,
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
             'pulp_upload_retries': DEFAULT_PULP_UPLOAD_RETRIES,
             'mock_basedir': DEFAULT_MOCK_BASEDIR,
@@ -184,6 +188,7 @@ class BuildNodeConfig(BaseConfig):
             'pulp_password': {'type': 'string', 'nullable': False},
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
             'pulp_uploader_max_workers': {'type': 'integer', 'nullable': False},
+            'pulp_chunk_workers': {'type': 'integer', 'min': 1},
             'mock_basedir': {'type': 'string', 'nullable': True},
             'jwt_token': {'type': 'string', 'required': True},
             'immudb_username': {'type': 'string', 'nullable': True},
