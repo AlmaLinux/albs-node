@@ -48,6 +48,7 @@ class TestBuildNodeConfig(TestCase):
             'pulp_password': "test_pwd",
             'pulp_chunk_size': 8388608,
             'pulp_uploader_max_workers': 4,
+            'pulp_chunk_workers': 4,
             'pulp_timeout': 60,
             'pulp_upload_retries': 3,
             'mock_basedir': None,

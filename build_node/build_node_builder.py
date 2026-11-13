@@ -99,6 +99,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             self.__config.pulp_password,
             self.__config.pulp_chunk_size,
             self.__config.pulp_uploader_max_workers,
+            chunk_workers=self.__config.pulp_chunk_workers,
             requests_timeout=self.__config.pulp_timeout,
             upload_retries=self.__config.pulp_upload_retries,
         )
