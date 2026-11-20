@@ -122,7 +122,6 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                 self.__terminated_event.wait(random.randint(5, 10))
                 continue
             self._build_stats = {}
-            self.__current_task_id = task.id
             self.__start_ts = datetime.datetime.utcnow()
             ts = int(self.__start_ts.timestamp())
             task_dir = os.path.join(self.__working_dir, str(task.id))
@@ -155,107 +154,144 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                 )
                 capture_exception(e)
             finally:
-                only_logs = not (
-                    bool(
-                        filter_files(
-                            artifacts_dir, lambda f: f.endswith('.rpm')
-                        )
-                    )
-                )
-                if success is False:
-                    only_logs = True
-                notarized_artifacts = {}
-                non_notarized_artifacts = []
-                if self._codenotary_enabled:
-                    try:
-                        (
-                            notarized_artifacts,
-                            non_notarized_artifacts,
-                        ) = self.__cas_notarize_artifacts(
-                            task,
-                            artifacts_dir,
-                        )
-                    except Exception:
-                        success = False
-                        only_logs = True
-                        self.__logger.exception('Cannot notarize artifacts:')
-                    self.__logger.debug(
-                        'List of notarized and not notarized artifacts:\n%s\n%s',
-                        pprint.pformat(notarized_artifacts),
-                        pprint.pformat(non_notarized_artifacts),
-                    )
-                    if non_notarized_artifacts:
-                        only_logs = True
-                        success = False
-                        self.__logger.error(
-                            'Cannot notarize following artifacts:\n%s',
-                            pprint.pformat(non_notarized_artifacts),
-                        )
-                build_artifacts = []
-                # The connections have been idle since the previous task
-                self._pulp_uploader.reset_connections()
+                # Whatever fails here, the builder must release the task and
+                # stay alive: a dead builder keeps its current_task_id and the
+                # task is never finished
                 try:
-                    build_artifacts = self.__upload_artifacts(
-                        artifacts_dir, only_logs=only_logs
+                    self.__report_task(
+                        task,
+                        artifacts_dir,
+                        task_log_file,
+                        success=success,
+                        excluded=excluded,
                     )
-                except Exception:
-                    self.__logger.exception('Cannot upload task artifacts')
-                    build_artifacts = []
-                    success = False
-                finally:
-                    try:
-                        build_artifacts.append(
-                            self._pulp_uploader.upload_single_file(
-                                task_log_file
-                            )
-                        )
-                    except Exception as e:
-                        self.__logger.exception(
-                            'Cannot upload task log file: %s', str(e)
-                        )
-
-                for artifact in build_artifacts:
-                    artifact.cas_hash = notarized_artifacts.get(artifact.path)
-
-                end_ts = datetime.datetime.utcnow()
-                delta = end_ts - self.__start_ts
-                self._build_stats.update({
-                    "build_node_task": {
-                        "start_ts": str(self.__start_ts),
-                        "end_ts": str(end_ts),
-                        "delta": str(delta),
-                    },
-                    **self.__builder.get_build_stats(),
-                })
-                try:
-                    if not success and excluded:
-                        self.__report_excluded_task(task, build_artifacts)
-                    else:
-                        self.__report_done_task(
-                            task,
-                            success=success,
-                            artifacts=build_artifacts,
-                        )
-                except Exception:
+                except Exception as e:
                     self.__logger.exception(
-                        'Cannot report task status to the main node'
+                        'task %i: cannot report the task status',
+                        task.id,
                     )
-                if task_log_handler:
-                    self.__close_task_logger(task_log_handler)
+                    capture_exception(e)
                 self.__current_task_id = None
                 self.__start_ts = None
                 self._build_stats = None
-                if os.path.exists(task_dir):
-                    self.__logger.debug(
-                        'cleaning up task build directory %s',
-                        task_dir,
+                try:
+                    if task_log_handler:
+                        self.__close_task_logger(task_log_handler)
+                    if os.path.exists(task_dir):
+                        self.__logger.debug(
+                            'cleaning up task build directory %s',
+                            task_dir,
+                        )
+                        # NOTE: sometimes source files have weird permissions
+                        #       which makes their deletion merely impossible
+                        #       without root permissions
+                        rm_sudo(task_dir)
+                except Exception:
+                    self.__logger.exception(
+                        'task %i: cannot clean up the task',
+                        task.id,
                     )
-                    # NOTE: sometimes source files have weird permissions
-                    #       which makes their deletion merely impossible
-                    #       without root permissions
-                    rm_sudo(task_dir)
                 self.__builder = None
                 self.__task_queue.task_done()
+
+    def __report_task(
+        self,
+        task: Task,
+        artifacts_dir: str,
+        task_log_file: str,
+        success: bool,
+        excluded: bool,
+    ):
+        """
+        Notarizes and uploads the task artifacts and the task log and reports
+        the task status to the build server.
+        """
+        # The artifacts directory is not listed for a failed task: the task
+        # may have failed before it was created
+        only_logs = not success or not filter_files(
+            artifacts_dir, lambda f: f.endswith('.rpm')
+        )
+        notarized_artifacts = {}
+        non_notarized_artifacts = []
+        if self._codenotary_enabled:
+            try:
+                (
+                    notarized_artifacts,
+                    non_notarized_artifacts,
+                ) = self.__cas_notarize_artifacts(
+                    task,
+                    artifacts_dir,
+                )
+            except Exception:
+                success = False
+                only_logs = True
+                self.__logger.exception('Cannot notarize artifacts:')
+            self.__logger.debug(
+                'List of notarized and not notarized artifacts:\n%s\n%s',
+                pprint.pformat(notarized_artifacts),
+                pprint.pformat(non_notarized_artifacts),
+            )
+            if non_notarized_artifacts:
+                only_logs = True
+                success = False
+                self.__logger.error(
+                    'Cannot notarize following artifacts:\n%s',
+                    pprint.pformat(non_notarized_artifacts),
+                )
+        build_artifacts = []
+        # The connections have been idle since the previous task
+        self._pulp_uploader.reset_connections()
+        try:
+            build_artifacts = self.__upload_artifacts(
+                artifacts_dir, only_logs=only_logs
+            )
+        except Exception:
+            self.__logger.exception('Cannot upload task artifacts')
+            build_artifacts = []
+            success = False
+        finally:
+            try:
+                build_artifacts.append(
+                    self._pulp_uploader.upload_single_file(
+                        task_log_file
+                    )
+                )
+            except Exception as e:
+                self.__logger.exception(
+                    'Cannot upload task log file: %s', str(e)
+                )
+
+        for artifact in build_artifacts:
+            artifact.cas_hash = notarized_artifacts.get(artifact.path)
+
+        end_ts = datetime.datetime.utcnow()
+        delta = end_ts - self.__start_ts
+        self._build_stats.update({
+            "build_node_task": {
+                "start_ts": str(self.__start_ts),
+                "end_ts": str(end_ts),
+                "delta": str(delta),
+            },
+            # There is no builder when the task fails before the build
+            **(
+                self.__builder.get_build_stats()
+                if self.__builder is not None
+                else {}
+            ),
+        })
+        try:
+            if not success and excluded:
+                self.__report_excluded_task(task, build_artifacts)
+            else:
+                self.__report_done_task(
+                    task,
+                    success=success,
+                    artifacts=build_artifacts,
+                )
+        except Exception:
+            self.__logger.exception(
+                'Cannot report task status to the main node'
+            )
 
     def __new_immudb_client(self) -> ImmudbWrapper:
         return ImmudbWrapper(
@@ -320,7 +356,20 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             self.__terminated_event.wait(0.5)
             return
         task = self.__task_queue.get()
-        return Task(**task)
+        # The builder reports the task in ping from now on: the supervisor
+        # does not see it in the queue anymore
+        self.__current_task_id = task.get('id')
+        try:
+            return Task(**task)
+        except Exception as e:
+            self.__logger.exception(
+                'task %s: cannot parse the task, skipping it:\n%s',
+                task.get('id'),
+                task,
+            )
+            capture_exception(e)
+            self.__current_task_id = None
+            self.__task_queue.task_done()
 
     def __report_excluded_task(self, task, artifacts):
         kwargs = {
@@ -331,6 +380,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             'is_cas_authenticated': task.is_cas_authenticated,
             'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
+            'node_name': self.__config.build_node_name,
         }
         self.__call_master(
             'build_done',
@@ -354,6 +404,7 @@ class BuildNodeBuilder(BaseSlaveBuilder):
             'is_cas_authenticated': task.is_cas_authenticated,
             'git_commit_hash': task.ref.git_commit_hash,
             'alma_commit_cas_hash': task.alma_commit_cas_hash,
+            'node_name': self.__config.build_node_name,
         }
         self.__call_master(
             'build_done',
@@ -397,8 +448,16 @@ class BuildNodeBuilder(BaseSlaveBuilder):
                 json=parameters,
                 timeout=self.__config.request_timeout,
             )
-            # Special case when build was already done
+            # Special case when build was already done or the task is
+            # assigned to another node
             if response.status_code == requests.codes.conflict:
+                self.__logger.warning(
+                    'task %s: the build server rejected %s, the result is '
+                    'discarded: %s',
+                    parameters.get('task_id'),
+                    endpoint,
+                    response.text[:constants.ERROR_BODY_LOG_LIMIT],
+                )
                 return {}
             response.raise_for_status()
             return response.json()

@@ -54,6 +54,7 @@ from build_node.utils.git_sources_utils import (
 )
 
 from .. import build_node_globals as node_globals
+from .. import constants
 
 # 'r' modifier and the number of slashes is intentional, modify very carefully
 # or don't touch this at all
@@ -721,10 +722,11 @@ class BaseRPMBuilder(BaseBuilder):
         if task.is_secure_boot:
             mock_config.set_config_opts({'isolation': 'simple'})
             mock_config.append_config_opt(
-                'nspawn_args', '--bind-ro=/opt/pesign:/usr/local/bin'
+                'nspawn_args',
+                f'--bind-ro={constants.PESIGN_DIR}:/usr/local/bin',
             )
             bind_plugin = MockBindMountPluginConfig(
-                True, [('/opt/pesign', '/usr/local/bin')]
+                True, [(constants.PESIGN_DIR, '/usr/local/bin')]
             )
             mock_config.add_plugin(bind_plugin)
             mock_config.add_file(
