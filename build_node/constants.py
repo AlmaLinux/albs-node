@@ -1,3 +1,5 @@
+import os
+
 __all__ = [
     'TOTAL_RETRIES',
     'STATUSES_TO_RETRY',
@@ -8,6 +10,8 @@ __all__ = [
     'ERROR_BODY_LOG_LIMIT',
     'INSTANCE_ID_FILE',
     'MAX_INSTANCE_ID_LENGTH',
+    'PESIGN_DIR',
+    'PESIGN_CLIENT_PATH',
 ]
 
 TOTAL_RETRIES = 5
@@ -45,3 +49,10 @@ ERROR_BODY_LOG_LIMIT = 500
 INSTANCE_ID_FILE = '.build_node_instance_id'
 # A previous instance id read from the file which is longer is garbage
 MAX_INSTANCE_ID_LENGTH = 255
+# Secure boot signing scripts (pesign, pesign-client, modsign...) installed
+# on the build node host, mounted into mock as /usr/local/bin for secure boot
+# builds
+PESIGN_DIR = '/opt/pesign'
+# The node signs secure boot builds if it is installed, see the
+# pesign_support option of the build node configuration
+PESIGN_CLIENT_PATH = os.path.join(PESIGN_DIR, 'pesign-client')

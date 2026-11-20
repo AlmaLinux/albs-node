@@ -81,3 +81,23 @@ def test_start_with_unusable_state_file(start_node, working_dir, caplog):
         _, previous_instance_id = start_node()
     assert previous_instance_id is None
     assert 'Cannot save the node instance id' in caplog.text
+
+
+@pytest.mark.parametrize('installed', [True, False])
+def test_detected_pesign_support_is_logged(
+    start_node, tmp_path, monkeypatch, caplog, installed
+):
+    pesign_client = tmp_path / 'pesign-client'
+    if installed:
+        pesign_client.write_text('#!/bin/sh\n')
+        pesign_client.chmod(0o755)
+    monkeypatch.setattr(
+        node_main.constants, 'PESIGN_CLIENT_PATH', str(pesign_client)
+    )
+    with caplog.at_level(logging.INFO):
+        config, _ = start_node()
+    assert config.pesign_support is installed
+    assert (
+        f'pesign support: {installed} (autodetect: {pesign_client} is '
+        f'{"found" if installed else "not found"})'
+    ) in caplog.text

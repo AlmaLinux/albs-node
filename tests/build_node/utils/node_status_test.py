@@ -75,6 +75,24 @@ def test_get_node_info(tmp_path):
     assert node_info['previous_instance_id'] == 'node-1.1234.0f3a9c2e'
 
 
+@pytest.mark.parametrize('installed', [True, False])
+def test_get_node_info_detected_pesign_support(
+    tmp_path, monkeypatch, installed
+):
+    """node_info has the detected pesign_support, never None"""
+    pesign_client = tmp_path / 'pesign-client'
+    if installed:
+        pesign_client.write_text('#!/bin/sh\n')
+        pesign_client.chmod(0o755)
+    monkeypatch.setattr(
+        'build_node.constants.PESIGN_CLIENT_PATH', str(pesign_client)
+    )
+    config = BuildNodeConfig(maintenance_mode_file=str(tmp_path / 'stop'))
+    with patch.object(node_status, 'get_node_version', return_value=None):
+        node_info = node_status.get_node_info(config)
+    assert node_info['pesign_support'] is installed
+
+
 def test_collect_node_resources(psutil_mock):
     resources = node_status.collect_node_resources('/srv/build_node')
     assert resources == {

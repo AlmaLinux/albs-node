@@ -19,7 +19,8 @@ DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_NATIVE_BUILDING = True
 DEFAULT_ARM64_BUILDING = False
 DEFAULT_ARM32_BUILDING = False
-DEFAULT_PESIGN_SUPPORT = False
+# Detected by the pesign installation, see detect_pesign_support
+DEFAULT_PESIGN_SUPPORT = None
 DEFAULT_NODE_TYPE = 'hard'
 DEFAULT_PULP_HOST = 'http://pulp'
 DEFAULT_PULP_USER = 'pulp'
@@ -39,7 +40,22 @@ DEFAULT_EXCLUSIONS_URL = (
 DEFAULT_CACHE_SIZE = 1
 DEFAULT_NUMA_AWARE = False
 
-__all__ = ['BuildNodeConfig']
+__all__ = ['BuildNodeConfig', 'detect_pesign_support']
+
+
+def detect_pesign_support() -> bool:
+    """
+    Checks whether the build node can sign secure boot builds: the pesign
+    scripts are installed on the host (albs-deploy installs them on every
+    build node), see constants.PESIGN_CLIENT_PATH.
+
+    Returns
+    -------
+    bool
+        True if pesign-client is an executable file, False otherwise.
+    """
+    path = constants.PESIGN_CLIENT_PATH
+    return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
 class BuildNodeConfig(BaseConfig):
@@ -99,6 +115,12 @@ class BuildNodeConfig(BaseConfig):
         Number of threads notarizing build artifacts in immudb. Each
         notarization is a few network round trips, so this is bound by
         latency to immudb, not by CPU.
+    pesign_support : bool
+        The build node signs secure boot builds, the build server gives
+        secure boot tasks only to such nodes. Unless it is set explicitly
+        (true or false), it is detected at start: True if
+        /opt/pesign/pesign-client is installed and executable. See
+        pesign_support_source.
     numa_aware : bool
         Pin each build thread (and the mock processes it spawns) to a single
         NUMA node. Disabled by default: on x86_64 and ppc64le hosts builds
@@ -186,7 +208,8 @@ class BuildNodeConfig(BaseConfig):
             'native_support': {'type': 'boolean', 'default': True},
             'arm64_support': {'type': 'boolean', 'default': False},
             'arm32_support': {'type': 'boolean', 'default': False},
-            'pesign_support': {'type': 'boolean', 'default': False},
+            # None (not set) is replaced with the detected value
+            'pesign_support': {'type': 'boolean', 'nullable': True},
             'node_type': {'type': 'string', 'nullable': True},
             'sentry_dsn': {'type': 'string', 'nullable': True},
             'sentry_environment': {'type': 'string', 'nullable': True},
@@ -222,6 +245,13 @@ class BuildNodeConfig(BaseConfig):
         super(BuildNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
         )
+        # An explicit false is kept: the node may have pesign installed, but
+        # be not allowed to sign
+        if self._config['pesign_support'] is None:
+            self._config['pesign_support'] = detect_pesign_support()
+            self.__pesign_support_source = 'autodetect'
+        else:
+            self.__pesign_support_source = 'config'
 
     @property
     def instance_id(self) -> str:
@@ -249,6 +279,19 @@ class BuildNodeConfig(BaseConfig):
         str
         """
         return os.path.join(self.working_dir, constants.INSTANCE_ID_FILE)
+
+    @property
+    def pesign_support_source(self) -> str:
+        """
+        Where the pesign_support value comes from: "config" if it is set
+        explicitly in the configuration, "autodetect" if it is detected by
+        the pesign installation.
+
+        Returns
+        -------
+        str
+        """
+        return self.__pesign_support_source
 
     @property
     def queue_size(self) -> int:
