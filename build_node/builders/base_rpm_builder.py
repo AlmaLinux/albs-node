@@ -431,6 +431,31 @@ class BaseRPMBuilder(BaseBuilder):
                 spec_file=spec_file,
                 definitions=mock_defines,
             )
+            if self.is_forgemeta_used(
+                spec_file or self.locate_spec_file(src_dir)
+            ):
+                # %forgemeta takes the snapshot date for Release from the
+                # source tarball mtime. rpm clamps the mtime inside of the
+                # src-RPM to the latest changelog date, so the src-RPM is
+                # built again from itself to get the same Release as binary
+                # RPMs will get.
+                self.logger.info(
+                    'spec file uses forgemeta, rebuilding src-RPM %s',
+                    srpm_build_result.srpm,
+                )
+                src_dir = os.path.join(self.task_dir, 'srpm_rebuild_sources')
+                srpm_result_dir = os.path.join(
+                    self.task_dir, 'srpm_rebuild_result'
+                )
+                os.makedirs(src_dir)
+                os.makedirs(srpm_result_dir)
+                unpack_src_rpm(srpm_build_result.srpm, src_dir)
+                srpm_build_result = self.build_srpm(
+                    srpm_mock_config,
+                    src_dir,
+                    srpm_result_dir,
+                    definitions=mock_defines,
+                )
         except MockError as e:
             excluded, reason = self.is_srpm_build_excluded(e)
             if excluded:
@@ -452,6 +477,32 @@ class BaseRPMBuilder(BaseBuilder):
         self.logger.info('starting RPM build')
         self.build_binaries(srpm_path, mock_defines)
         self.logger.info('RPM build completed')
+
+    @staticmethod
+    def is_forgemeta_used(spec_file):
+        """
+        Checks if a spec file uses the %forgemeta macro.
+
+        Parameters
+        ----------
+        spec_file : str
+            Spec file path.
+
+        Returns
+        -------
+        bool
+            True if the spec file uses the %forgemeta macro, False otherwise.
+
+        Notes
+        -----
+        rpm expands macros in "#" comments too, so a commented out macro is
+        still in use unless it is escaped ("%%forgemeta") or follows %dnl.
+        """
+        forgemeta_re = re.compile(rb'(?<!%)(?:%%)*%\{?\??forgemeta\b')
+        with open(spec_file, 'rb') as fd:
+            return any(
+                forgemeta_re.search(line.split(b'%dnl', 1)[0]) for line in fd
+            )
 
     @measure_stage("sources_unpack")
     def unpack_sources(self):

@@ -455,6 +455,106 @@ class TestBuildFromBuiltSrpm(TestCase):
         )
 
 
+class TestForgemetaSrpmRebuild(TestCase):
+    """BaseRPMBuilder.build_packages src-RPM rebuild for %forgemeta specs"""
+
+    @pytest.fixture(autouse=True)
+    def set_task(self, build_task):
+        self.task = build_task
+
+    def setUp(self):
+        self.setUpPyfakefs()
+        self.task_dir = '/test/task_dir'
+        self.src_dir = os.path.join(self.task_dir, 'source_srpm')
+        self.spec_file = os.path.join(self.src_dir, 'test.spec')
+        os.makedirs(self.src_dir)
+        self.first_srpm = '/test/task_dir/srpm_result/test-1-1.20261110git.src.rpm'
+        self.second_srpm = (
+            '/test/task_dir/srpm_rebuild_result/test-1-1.20260304git.src.rpm'
+        )
+        self.builder = BaseRPMBuilder(
+            Mock(codenotary_enabled=False),
+            logging.getLogger('BaseRPMBuilderLogger'),
+            self.task,
+            self.task_dir,
+            '/test/artifacts',
+            None,
+        )
+
+    def build_packages(self, spec_content):
+        with open(self.spec_file, 'w') as fd:
+            fd.write(spec_content)
+        with patch.object(
+            BaseRPMBuilder,
+            'build_srpm',
+            side_effect=[Mock(srpm=self.first_srpm), Mock(srpm=self.second_srpm)],
+        ) as build_srpm, patch.object(
+            BaseRPMBuilder, 'build_binaries'
+        ) as build_binaries, patch.object(
+            BaseRPMBuilder, 'save_build_artifacts'
+        ) as save_build_artifacts, patch.object(
+            BaseRPMBuilder, 'is_build_excluded', return_value=(False, None)
+        ), patch.object(
+            BaseRPMBuilder, 'generate_mock_config'
+        ), patch(
+            'build_node.builders.base_rpm_builder.unpack_src_rpm'
+        ) as unpack_src_rpm:
+            self.builder.build_packages(self.src_dir, self.spec_file)
+        return build_srpm, build_binaries, save_build_artifacts, unpack_src_rpm
+
+    def test_forgemeta_spec(self):
+        """BaseRPMBuilder.build_packages rebuilds src-RPM of a forgemeta spec"""
+        build_srpm, build_binaries, save_build_artifacts, unpack_src_rpm = (
+            self.build_packages('Name: test\n%forgemeta\nRelease: 1%{?dist}\n')
+        )
+        rebuild_src_dir = os.path.join(self.task_dir, 'srpm_rebuild_sources')
+        unpack_src_rpm.assert_called_once_with(self.first_srpm, rebuild_src_dir)
+        self.assertEqual(build_srpm.call_count, 2)
+        args, kwargs = build_srpm.call_args
+        self.assertEqual(args[1], rebuild_src_dir)
+        self.assertEqual(args[2], os.path.dirname(self.second_srpm))
+        # only the rebuilt src-RPM is saved and used for the binary build
+        save_build_artifacts.assert_called_once()
+        self.assertEqual(
+            save_build_artifacts.call_args[0][0].srpm, self.second_srpm
+        )
+        build_binaries.assert_called_once_with(self.second_srpm, None)
+
+    def test_forgemeta_detection(self):
+        """BaseRPMBuilder.is_forgemeta_used detects forgemeta like rpm does"""
+        cases = {
+            '%forgemeta\n': True,
+            '%forgemeta -a\n': True,
+            '%{forgemeta}\n': True,
+            '%{?forgemeta}\n': True,
+            # rpm expands macros in comments
+            '#%forgemeta\n': True,
+            '# %forgemeta\n': True,
+            '%%%forgemeta\n': True,
+            '#%%forgemeta\n': False,
+            '%dnl %forgemeta\n': False,
+            '# forgemeta appends commit info\n': False,
+            '%forgemetafoo\n': False,
+        }
+        for line, expected in cases.items():
+            with open(self.spec_file, 'w') as fd:
+                fd.write(f'Name: test\n{line}Release: 1%{{?dist}}\n')
+            self.assertEqual(
+                BaseRPMBuilder.is_forgemeta_used(self.spec_file),
+                expected,
+                line,
+            )
+
+    def test_usual_spec(self):
+        """BaseRPMBuilder.build_packages builds a usual src-RPM only once"""
+        build_srpm, build_binaries, _, unpack_src_rpm = self.build_packages(
+            'Name: test\nRelease: 1%{?dist}\n'
+        )
+        build_srpm.assert_called_once()
+        unpack_src_rpm.assert_not_called()
+        build_binaries.assert_called_once_with(self.first_srpm, None)
+
+
 @pytest.mark.skip(reason="We need to rewrite it to pytest")
 class TestUnpackSources(TestCase):
     """BaseRPMBuilder.unpack_sources unit tests"""
