@@ -4,12 +4,13 @@ AlmaLinux Build System build node configuration storage.
 
 import os
 import platform
+import secrets
 
+from build_node import constants
 from build_node.utils.config import BaseConfig
 
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
-DEFAULT_QUEUE_SIZE = DEFAULT_THREADS_COUNT + 1
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
 DEFAULT_MAINTENANCE_MODE_FILE = '/tmp/graceful_stop'
 DEFAULT_SENTRY_DSN = ''
@@ -55,9 +56,16 @@ class BuildNodeConfig(BaseConfig):
     npm_proxy : str
         NPM (Yarn) proxy URL.
     node_id : str
-        Current build node unique identifier.
+        Current build node identifier, hostname.pid unless it is set
+        explicitly, so it can stay the same across restarts. See instance_id
+        for the identifier of the running process.
     threads_count : int
-        The number of build threads.
+        The number of build threads, it is also the number of tasks the node
+        takes from the build server at once.
+    queue_size : int
+        Local build tasks queue size, always equal to ``threads_count``. The
+        ``queue_size`` configuration option is obsolete and ignored, it is
+        still accepted to keep old configuration files valid.
     working_dir : str
         Build node working directory path. The directory will be used for
         temporary files storage.
@@ -109,13 +117,16 @@ class BuildNodeConfig(BaseConfig):
         cmd_args : dict
             Command line arguments.
         """
+        # Random, so the instance id of every start of the node is unique:
+        # the pid of the node process is the same on every start in a
+        # container, and node_id can be set explicitly
+        self.__run_id = secrets.token_hex(4)
         default_config = {
             'development_mode': False,
             'master_url': DEFAULT_MASTER_URL,
             'npm_proxy': '',
             'node_id': self.generate_node_id(),
             'threads_count': DEFAULT_THREADS_COUNT,
-            'queue_size': DEFAULT_QUEUE_SIZE,
             'working_dir': DEFAULT_WORKING_DIR,
             'maintenance_mode_file': DEFAULT_MAINTENANCE_MODE_FILE,
             # NOTE: those parameters are added for old Build System code
@@ -161,7 +172,8 @@ class BuildNodeConfig(BaseConfig):
             'npm_proxy': {'type': 'string'},
             'node_id': {'type': 'string', 'required': True},
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
-            'queue_size': {'type': 'integer', 'min': 2, 'required': True},
+            # Obsolete, see the queue_size property
+            'queue_size': {'type': 'integer', 'nullable': True},
             'working_dir': {'type': 'string', 'required': True},
             'maintenance_mode_file': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
@@ -210,6 +222,45 @@ class BuildNodeConfig(BaseConfig):
         super(BuildNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
         )
+
+    @property
+    def instance_id(self) -> str:
+        """
+        Identifier of this start of the build node process: node_id followed
+        by a random run id, e.g. "node-1.1234.0f3a9c2e". The build server
+        tells the processes which share the same node name from each other
+        by it, and a node restart from a second process.
+
+        Returns
+        -------
+        str
+        """
+        return f'{self.node_id}.{self.__run_id}'
+
+    @property
+    def instance_id_file(self) -> str:
+        """
+        State file which keeps the instance id of the last started build node
+        process, it is in the working directory: the working directory
+        persists across the node restarts.
+
+        Returns
+        -------
+        str
+        """
+        return os.path.join(self.working_dir, constants.INSTANCE_ID_FILE)
+
+    @property
+    def queue_size(self) -> int:
+        """
+        Local build tasks queue size, equal to the number of build threads:
+        the node does not take more tasks than it can build at once.
+
+        Returns
+        -------
+        int
+        """
+        return self.threads_count
 
     @property
     def codenotary_enabled(self) -> bool:

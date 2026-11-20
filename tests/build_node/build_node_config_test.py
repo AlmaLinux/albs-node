@@ -2,6 +2,8 @@
 
 import platform
 import os
+import re
+from unittest.mock import patch
 
 from pyfakefs.fake_filesystem_unittest import TestCase
 import yaml
@@ -89,4 +91,46 @@ class TestBuildNodeConfig(TestCase):
         self.assertEqual(
             self.default_config.mock_configs_storage_dir,
             os.path.join(self.working_dir, 'mock_configs'),
+        )
+
+    def test_queue_size_follows_threads_count(self):
+        """BuildNodeConfig queue_size is equal to threads_count"""
+        self.assertEqual(self.default_config.queue_size, 4)
+        self.assertEqual(BuildNodeConfig(threads_count=3).queue_size, 3)
+        # The obsolete queue_size option is accepted, but ignored
+        with open(self.config_file, 'w') as fd:
+            yaml.dump({'threads_count': 7, 'queue_size': 2}, fd)
+        self.assertEqual(BuildNodeConfig(self.config_file).queue_size, 7)
+
+    def test_instance_id(self):
+        """BuildNodeConfig instance_id is node_id with a random run id"""
+        self.assertRegex(
+            self.default_config.instance_id,
+            r'^{0}\.{1}\.[0-9a-f]{{8}}$'.format(
+                re.escape(self.hostname), os.getpid()
+            ),
+        )
+        # The same for the whole process run
+        self.assertEqual(
+            self.default_config.instance_id, self.default_config.instance_id
+        )
+        explicit = BuildNodeConfig(node_id='superNode')
+        self.assertRegex(explicit.instance_id, r'^superNode\.[0-9a-f]{8}$')
+
+    def test_instance_id_is_unique_for_every_start(self):
+        """BuildNodeConfig instance_id differs between starts with the same
+        hostname and pid, e.g. a restarted node container"""
+        with patch(
+            'build_node.utils.config.platform.node', return_value='node-1'
+        ), patch('build_node.utils.config.os.getpid', return_value=1):
+            first = BuildNodeConfig()
+            second = BuildNodeConfig()
+        self.assertEqual(first.node_id, second.node_id)
+        self.assertTrue(first.instance_id.startswith('node-1.1.'))
+        self.assertTrue(second.instance_id.startswith('node-1.1.'))
+        self.assertNotEqual(first.instance_id, second.instance_id)
+        # An explicitly set node id is the same on every start as well
+        self.assertNotEqual(
+            BuildNodeConfig(node_id='superNode').instance_id,
+            BuildNodeConfig(node_id='superNode').instance_id,
         )
