@@ -26,6 +26,8 @@ DEFAULT_PULP_PASSWORD = 'test_pwd'
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 DEFAULT_PULP_UPLOADER_MAX_WORKERS = 4
 DEFAULT_MOCK_BASEDIR = None
+DEFAULT_MOCK_DNF_MAX_ATTEMPTS = 3
+DEFAULT_MOCK_DNF_ATTEMPT_DELAY = 15  # seconds
 DEFAULT_REQUEST_TIMEOUT = 60  # 1 minute
 DEFAULT_PULP_TIMEOUT = 60  # seconds
 DEFAULT_PULP_UPLOAD_RETRIES = 3
@@ -87,6 +89,14 @@ class BuildNodeConfig(BaseConfig):
     pulp_upload_retries : int
         How many times a file upload is started over after a connection
         error, a timeout or a server error.
+    mock_dnf_max_attempts : int
+        How many times mock runs a failed package manager (dnf) action
+        before it gives up, mock's ``package_manager_max_attempts``. A
+        repository or a mirror that is unavailable for a moment then does
+        not fail the whole build. 1 disables the retries.
+    mock_dnf_attempt_delay : int
+        Delay between those attempts in seconds, mock's
+        ``package_manager_attempt_delay``.
     notarization_workers : int
         Number of threads notarizing build artifacts in immudb. Each
         notarization is a few network round trips, so this is bound by
@@ -139,6 +149,8 @@ class BuildNodeConfig(BaseConfig):
             'pulp_timeout': DEFAULT_PULP_TIMEOUT,
             'pulp_upload_retries': DEFAULT_PULP_UPLOAD_RETRIES,
             'mock_basedir': DEFAULT_MOCK_BASEDIR,
+            'mock_dnf_max_attempts': DEFAULT_MOCK_DNF_MAX_ATTEMPTS,
+            'mock_dnf_attempt_delay': DEFAULT_MOCK_DNF_ATTEMPT_DELAY,
             'base_arch': platform.machine(),
             'build_src': True,
             'immudb_username': None,
@@ -185,6 +197,8 @@ class BuildNodeConfig(BaseConfig):
             'pulp_chunk_size': {'type': 'integer', 'nullable': False},
             'pulp_uploader_max_workers': {'type': 'integer', 'nullable': False},
             'mock_basedir': {'type': 'string', 'nullable': True},
+            'mock_dnf_max_attempts': {'type': 'integer', 'min': 1},
+            'mock_dnf_attempt_delay': {'type': 'integer', 'min': 0},
             'jwt_token': {'type': 'string', 'required': True},
             'immudb_username': {'type': 'string', 'nullable': True},
             'immudb_password': {'type': 'string', 'nullable': True},

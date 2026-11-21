@@ -51,6 +51,8 @@ class TestBuildNodeConfig(TestCase):
             'pulp_timeout': 60,
             'pulp_upload_retries': 3,
             'mock_basedir': None,
+            'mock_dnf_max_attempts': 3,
+            'mock_dnf_attempt_delay': 15,
             'base_arch': platform.machine(),
             'build_src': True,
             'immudb_username': None,
