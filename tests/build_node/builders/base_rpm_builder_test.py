@@ -602,3 +602,45 @@ development mode"""
         unpack_src_rpm.assert_called_with(
             self.srpm_path, os.path.dirname(self.srpm_path)
         )
+
+
+class TestGenerateMockConfigDnfRetries:
+    """BaseRPMBuilder.generate_mock_config package manager retries options"""
+
+    @staticmethod
+    def __render(tmp_path, build_task, mock_data=None, **config_kwargs):
+        from build_node.build_node_config import BuildNodeConfig
+
+        build_task.platform.data['mock'] = mock_data or {}
+        config = BuildNodeConfig(**config_kwargs)
+        mock_config = BaseRPMBuilder.generate_mock_config(config, build_task)
+        config_file = tmp_path / 'mock.cfg'
+        mock_config.dump_to_file(str(config_file), root='test')
+        return config_file.read_text()
+
+    def test_defaults(self, tmp_path, build_task):
+        """mock retries a failed dnf action 3 times by default"""
+        content = self.__render(tmp_path, build_task)
+        assert 'config_opts["package_manager_max_attempts"] = 3' in content
+        assert 'config_opts["package_manager_attempt_delay"] = 15' in content
+
+    def test_node_config(self, tmp_path, build_task):
+        """the retries are taken from the build node configuration"""
+        content = self.__render(
+            tmp_path,
+            build_task,
+            mock_dnf_max_attempts=5,
+            mock_dnf_attempt_delay=30,
+        )
+        assert 'config_opts["package_manager_max_attempts"] = 5' in content
+        assert 'config_opts["package_manager_attempt_delay"] = 30' in content
+
+    def test_platform_overrides_node_config(self, tmp_path, build_task):
+        """a platform mock configuration overrides the build node one"""
+        content = self.__render(
+            tmp_path,
+            build_task,
+            mock_data={'package_manager_max_attempts': 7},
+        )
+        assert 'config_opts["package_manager_max_attempts"] = 7' in content
+        assert 'config_opts["package_manager_attempt_delay"] = 15' in content

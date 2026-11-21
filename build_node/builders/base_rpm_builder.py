@@ -689,7 +689,14 @@ class BaseRPMBuilder(BaseBuilder):
             repositories=yum_repos,
             **yum_config_kwargs,
         )
-        mock_config_kwargs = {'use_bootstrap_container': False, 'macros': {}}
+        mock_config_kwargs = {
+            'use_bootstrap_container': False,
+            'macros': {},
+            # retry a dnf action which failed, e.g. because a repository
+            # was unavailable for a moment, instead of failing the build
+            'package_manager_max_attempts': config.mock_dnf_max_attempts,
+            'package_manager_attempt_delay': config.mock_dnf_attempt_delay,
+        }
         target_arch = task.arch
         use_host_resolv = True
         if target_arch == 'src':
