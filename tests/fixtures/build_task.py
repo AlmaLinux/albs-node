@@ -3,8 +3,9 @@ from albs_build_lib.builder.models import Task
 
 
 @pytest.fixture
-def build_task():
-    task = {
+def build_task_data():
+    """Build task as the build server sends it."""
+    return {
         "id": 1,
         "arch": "x86_64",
         "build_id": 1,
@@ -31,7 +32,11 @@ def build_task():
             "mock_enabled": False,
         }],
     }
-    return Task(**task)
+
+
+@pytest.fixture
+def build_task(build_task_data):
+    return Task(**build_task_data)
 
 
 @pytest.fixture

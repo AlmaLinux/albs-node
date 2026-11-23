@@ -16,10 +16,12 @@ from albs_common_lib.utils.file_utils import chown_recursive, rm_sudo
 from albs_common_lib.utils.spec_parser import SpecParseError
 
 import build_node.build_node_globals as node_globals
+from build_node import constants
 from build_node.build_node_builder import BuildNodeBuilder
 from build_node.build_node_config import BuildNodeConfig
 from build_node.build_node_supervisor import BuilderSupervisor
 from build_node.utils.config import locate_config_file
+from build_node.utils.node_status import rotate_instance_id
 from build_node.utils.numa import build_numa_assignments
 
 running = True
@@ -146,6 +148,23 @@ def main(sys_args):
     init_logger(args.verbose)
     init_working_dir(config)
     init_sentry(config)
+    if config.pesign_support_source == 'autodetect':
+        logging.info(
+            'pesign support: %s (autodetect: %s is %s)',
+            config.pesign_support,
+            constants.PESIGN_CLIENT_PATH,
+            'found' if config.pesign_support else 'not found',
+        )
+    else:
+        logging.info('pesign support: %s (config)', config.pesign_support)
+    previous_instance_id = rotate_instance_id(
+        config.instance_id_file, config.instance_id
+    )
+    logging.info(
+        'build node instance %s, previous instance %s',
+        config.instance_id,
+        previous_instance_id,
+    )
 
     node_terminated = Event()
     node_graceful_terminated = Event()
@@ -198,6 +217,7 @@ def main(sys_args):
         builders,
         node_terminated,
         task_queue,
+        previous_instance_id=previous_instance_id,
     )
     builder_supervisor.start()
 
