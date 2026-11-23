@@ -4,12 +4,13 @@ AlmaLinux Build System build node configuration storage.
 
 import os
 import platform
+import secrets
 
+from build_node import constants
 from build_node.utils.config import BaseConfig
 
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_THREADS_COUNT = 4
-DEFAULT_QUEUE_SIZE = DEFAULT_THREADS_COUNT + 1
 DEFAULT_WORKING_DIR = '/srv/alternatives/castor/build_node'
 DEFAULT_MAINTENANCE_MODE_FILE = '/tmp/graceful_stop'
 DEFAULT_SENTRY_DSN = ''
@@ -18,7 +19,8 @@ DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_NATIVE_BUILDING = True
 DEFAULT_ARM64_BUILDING = False
 DEFAULT_ARM32_BUILDING = False
-DEFAULT_PESIGN_SUPPORT = False
+# Detected by the pesign installation, see detect_pesign_support
+DEFAULT_PESIGN_SUPPORT = None
 DEFAULT_NODE_TYPE = 'hard'
 DEFAULT_PULP_HOST = 'http://pulp'
 DEFAULT_PULP_USER = 'pulp'
@@ -38,7 +40,22 @@ DEFAULT_EXCLUSIONS_URL = (
 DEFAULT_CACHE_SIZE = 1
 DEFAULT_NUMA_AWARE = False
 
-__all__ = ['BuildNodeConfig']
+__all__ = ['BuildNodeConfig', 'detect_pesign_support']
+
+
+def detect_pesign_support() -> bool:
+    """
+    Checks whether the build node can sign secure boot builds: the pesign
+    scripts are installed on the host (albs-deploy installs them on every
+    build node), see constants.PESIGN_CLIENT_PATH.
+
+    Returns
+    -------
+    bool
+        True if pesign-client is an executable file, False otherwise.
+    """
+    path = constants.PESIGN_CLIENT_PATH
+    return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
 class BuildNodeConfig(BaseConfig):
@@ -55,9 +72,16 @@ class BuildNodeConfig(BaseConfig):
     npm_proxy : str
         NPM (Yarn) proxy URL.
     node_id : str
-        Current build node unique identifier.
+        Current build node identifier, hostname.pid unless it is set
+        explicitly, so it can stay the same across restarts. See instance_id
+        for the identifier of the running process.
     threads_count : int
-        The number of build threads.
+        The number of build threads, it is also the number of tasks the node
+        takes from the build server at once.
+    queue_size : int
+        Local build tasks queue size, always equal to ``threads_count``. The
+        ``queue_size`` configuration option is obsolete and ignored, it is
+        still accepted to keep old configuration files valid.
     working_dir : str
         Build node working directory path. The directory will be used for
         temporary files storage.
@@ -91,6 +115,12 @@ class BuildNodeConfig(BaseConfig):
         Number of threads notarizing build artifacts in immudb. Each
         notarization is a few network round trips, so this is bound by
         latency to immudb, not by CPU.
+    pesign_support : bool
+        The build node signs secure boot builds, the build server gives
+        secure boot tasks only to such nodes. Unless it is set explicitly
+        (true or false), it is detected at start: True if
+        /opt/pesign/pesign-client is installed and executable. See
+        pesign_support_source.
     numa_aware : bool
         Pin each build thread (and the mock processes it spawns) to a single
         NUMA node. Disabled by default: on x86_64 and ppc64le hosts builds
@@ -109,13 +139,16 @@ class BuildNodeConfig(BaseConfig):
         cmd_args : dict
             Command line arguments.
         """
+        # Random, so the instance id of every start of the node is unique:
+        # the pid of the node process is the same on every start in a
+        # container, and node_id can be set explicitly
+        self.__run_id = secrets.token_hex(4)
         default_config = {
             'development_mode': False,
             'master_url': DEFAULT_MASTER_URL,
             'npm_proxy': '',
             'node_id': self.generate_node_id(),
             'threads_count': DEFAULT_THREADS_COUNT,
-            'queue_size': DEFAULT_QUEUE_SIZE,
             'working_dir': DEFAULT_WORKING_DIR,
             'maintenance_mode_file': DEFAULT_MAINTENANCE_MODE_FILE,
             # NOTE: those parameters are added for old Build System code
@@ -161,7 +194,8 @@ class BuildNodeConfig(BaseConfig):
             'npm_proxy': {'type': 'string'},
             'node_id': {'type': 'string', 'required': True},
             'threads_count': {'type': 'integer', 'min': 1, 'required': True},
-            'queue_size': {'type': 'integer', 'min': 2, 'required': True},
+            # Obsolete, see the queue_size property
+            'queue_size': {'type': 'integer', 'nullable': True},
             'working_dir': {'type': 'string', 'required': True},
             'maintenance_mode_file': {'type': 'string', 'required': True},
             'git_cache_locks_dir': {'type': 'string', 'required': True},
@@ -174,7 +208,8 @@ class BuildNodeConfig(BaseConfig):
             'native_support': {'type': 'boolean', 'default': True},
             'arm64_support': {'type': 'boolean', 'default': False},
             'arm32_support': {'type': 'boolean', 'default': False},
-            'pesign_support': {'type': 'boolean', 'default': False},
+            # None (not set) is replaced with the detected value
+            'pesign_support': {'type': 'boolean', 'nullable': True},
             'node_type': {'type': 'string', 'nullable': True},
             'sentry_dsn': {'type': 'string', 'nullable': True},
             'sentry_environment': {'type': 'string', 'nullable': True},
@@ -210,6 +245,65 @@ class BuildNodeConfig(BaseConfig):
         super(BuildNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
         )
+        # An explicit false is kept: the node may have pesign installed, but
+        # be not allowed to sign
+        if self._config['pesign_support'] is None:
+            self._config['pesign_support'] = detect_pesign_support()
+            self.__pesign_support_source = 'autodetect'
+        else:
+            self.__pesign_support_source = 'config'
+
+    @property
+    def instance_id(self) -> str:
+        """
+        Identifier of this start of the build node process: node_id followed
+        by a random run id, e.g. "node-1.1234.0f3a9c2e". The build server
+        tells the processes which share the same node name from each other
+        by it, and a node restart from a second process.
+
+        Returns
+        -------
+        str
+        """
+        return f'{self.node_id}.{self.__run_id}'
+
+    @property
+    def instance_id_file(self) -> str:
+        """
+        State file which keeps the instance id of the last started build node
+        process, it is in the working directory: the working directory
+        persists across the node restarts.
+
+        Returns
+        -------
+        str
+        """
+        return os.path.join(self.working_dir, constants.INSTANCE_ID_FILE)
+
+    @property
+    def pesign_support_source(self) -> str:
+        """
+        Where the pesign_support value comes from: "config" if it is set
+        explicitly in the configuration, "autodetect" if it is detected by
+        the pesign installation.
+
+        Returns
+        -------
+        str
+        """
+        return self.__pesign_support_source
+
+    @property
+    def queue_size(self) -> int:
+        """
+        Local build tasks queue size, equal to the number of build threads:
+        the node does not take more tasks than it can build at once.
+
+        Returns
+        -------
+        int
+        """
+        return self.threads_count
 
     @property
     def codenotary_enabled(self) -> bool:
